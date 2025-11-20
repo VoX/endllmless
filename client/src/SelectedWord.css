@@ -1,0 +1,12 @@
+span.word {
+  padding: 4px;
+  white-space: nowrap;
+  text-transform: capitalize;
+}
+
+span.firstWord {
+  /* Needed for transform */
+  animation: tada 1s ease 1;
+  color: #ffd700;
+  /* Adjust time and easing as needed */
+}

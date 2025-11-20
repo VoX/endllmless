@@ -1,0 +1,7 @@
+.word-combo {
+  display: flex;
+  height: 50px;
+  justify-content: center;
+  margin-bottom: 16px;
+  min-height: 40px;
+}

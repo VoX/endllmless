@@ -1,0 +1,22 @@
+.spinner {
+  animation: spin 2s linear infinite;
+  border: 10px solid #f3f3f3;
+  border-top: 10px solid #3498db;
+  border-radius: 50%;
+  display: inline-block;
+  height: 0.5vw;
+  margin-left: 10px;
+  max-height: 100%;
+  padding: 10px;
+  width: 0.5vw;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
+}

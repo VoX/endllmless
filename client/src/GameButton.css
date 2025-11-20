@@ -1,0 +1,39 @@
+.game-buttons-container {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 100%;
+  margin: 0 auto;
+  width: 96vw;
+}
+
+.game-button {
+  min-height: 104px;
+  min-width: 64px;
+  padding: 0px 6px 0px 6px;
+  text-transform: capitalize;
+}
+
+.game-button.tada {
+  animation: tada 1s ease 1;
+}
+
+.game-button.selected {
+  background: #ffe066;
+  transition: background 0.15s linear;
+}
+
+.game-button.selected.fade-out {
+  background: #9fd3c7;
+  transition: background 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.game-button:not(.selected):not(.fade-out) {
+  transition: background 0s;
+}
+
+@media (min-width: 720px) {
+  .game-buttons-container {
+    width: 80vw;
+  }
+}

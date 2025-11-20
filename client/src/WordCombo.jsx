@@ -1,6 +1,7 @@
 import { useEffect } from "preact/hooks";
 import { SelectedWord } from "./SelectedWord";
 import { Spinner } from "./Spinner";
+import "./WordCombo.css";
 
 const wordCombineApi = async (firstWord, secondWord) => {
     const requestTask = fetch(`/wordcombine?wordone=${firstWord}&wordtwo=${secondWord}`);

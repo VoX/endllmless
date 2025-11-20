@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "preact/hooks";
+import "./GameButton.css";
 
 // word: string, onClick: Function
 const GameButton = ({ emoji, index, onClick, word }) => {
