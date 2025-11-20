@@ -1,0 +1,26 @@
+jelly.bitvox.me {
+        @jelly path /{$JELLY_PATH}/*
+
+	route @jelly {	
+		uri strip_prefix /{$JELLY_PATH}
+                reverse_proxy host.docker.internal:8097  {
+                        header_up X-Forwarded-For "192.168.10.177"
+                        header_up X-Forwarded-Host "192.168.10.177"
+                }
+        }
+}
+
+endless.bitvox.me {
+    encode gzip
+
+    # Reverse proxy for a specific path
+    reverse_proxy /wordcombine localhost:8080
+
+    # Serve static files from a specific directory
+    root * /app/client/dist
+
+    # Handle static file serving
+    file_server
+}
+
+
