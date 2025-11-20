@@ -14,7 +14,9 @@ Endllmless is a monorepo web application that replicates "Infinite Craft" mechan
   - **Styling**: CSS files imported directly into components (e.g., `import "./App.css"`).
 - **Backend (Server)**:
   - **Framework**: Express.js.
-  - **Core Logic**: `routes/wordCombine.js` handles word combination using OpenAI `gpt-5.1` with Structured Outputs.
+  - **Core Logic**: 
+    - `routes/wordCombine.js`: Handles word combination using OpenAI `gpt-5.1` with Structured Outputs.
+    - `routes/titleGenerator.js`: Generates abstract titles for the game header.
   - **Caching**: In-memory `Map` (`wordCache`) stores combined results to reduce API calls.
 - **Deployment**:
   - **Docker**: Single container architecture running both Caddy and Node.js server.
@@ -22,7 +24,7 @@ Endllmless is a monorepo web application that replicates "Infinite Craft" mechan
     - **Build**: Multi-stage build. Stage 1 builds client assets; Stage 2 sets up runtime.
   - **Caddy**:
     - Serves static client files from `/app/client/dist`.
-    - Proxies `/wordcombine` to local Node server (`localhost:8080`).
+    - Proxies `/api/*` to local Node server (`localhost:8080`).
     - Proxies external services to `host.docker.internal` (requires `--add-host` flag).
     - Uses `JELLY_PATH` env var for secret path configuration.
 
@@ -48,13 +50,17 @@ Endllmless is a monorepo web application that replicates "Infinite Craft" mechan
   - **Routes**: Define new routes in `server/routes/` and register them in `server/app.js`.
   - **AI Integration**: Keep prompt logic within the route handlers (like `wordCombine.js`) or extract to a dedicated service if complexity grows.
 - **Data Flow**:
-  - Client makes GET requests to Server (e.g., `/wordCombine?wordone=...&wordtwo=...`).
+  - Client makes GET requests to Server (e.g., `/api/wordcombine?wordone=...&wordtwo=...`).
   - Server returns JSON: `{ word: "NewWord", emoji: "🆕" }` (inferred structure, verify actual response).
 
 ## Specific Patterns
 - **Word Combination**:
   - Logic: `wordOne` + `wordTwo` -> OpenAI (Structured Output) -> `{ newWord, newEmoji }`.
   - **Ordering**: Words are sorted alphabetically before caching/processing (`wordOne > wordTwo` swap) to ensure "Fire + Water" is the same as "Water + Fire".
+- **Title Generation**:
+  - Route: `/api/title`
+  - Logic: Generates 50 titles at once using OpenAI.
+  - Caching: Caches the list for 1 hour. Serves one title from the list per request (round-robin).
 - **Emoji**: The app relies on emojis as the primary visual representation of words.
 
 ## Common Tasks

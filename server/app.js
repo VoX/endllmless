@@ -5,6 +5,7 @@ import logger from 'morgan';
 import { fileURLToPath } from 'url';
 
 import wordCombineRouter from './routes/wordCombine.js';
+import titleGeneratorRouter from './routes/titleGenerator.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,7 +17,8 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.use('/wordcombine', wordCombineRouter);
+app.use('/api/wordcombine', wordCombineRouter);
+app.use('/api/title', titleGeneratorRouter);
 
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {

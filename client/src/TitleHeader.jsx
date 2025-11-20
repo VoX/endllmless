@@ -1,26 +1,31 @@
 import { useEffect, useState } from "preact/hooks";
-import { stopWords } from "./stopWords";
-
-const getRandomStopWord = () =>
-    stopWords[Math.floor(stopWords.length * Math.random())];
 
 export const TitleHeader = () => {
-    const [stopWord, setStopWord] = useState("Endless");
+    const [titleWord, setTitleWord] = useState("Endless");
 
     useEffect(() => {
-        const interval = setInterval(
-            () => setStopWord(getRandomStopWord()),
-            Math.random() * 10000 + 5000
-        );
-        return () => {
-            clearInterval(interval);
+        const fetchTitle = () => {
+            fetch('/api/title')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.title) {
+                        setTitleWord(data.title);
+                    }
+                })
+                .catch(err => console.error("Failed to fetch title:", err));
         };
+
+        fetchTitle(); // Initial fetch
+
+        const interval = setInterval(fetchTitle, Math.random() * 10000 + 5000);
+
+        return () => clearInterval(interval);
     }, []);
 
     return (
         <div>
             <h2 style={{ textTransform: "uppercase" }}>
-                CRAFT {stopWord} THINGS
+                CRAFT {titleWord} THINGS
             </h2>
         </div>
     );

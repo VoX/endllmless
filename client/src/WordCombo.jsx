@@ -4,7 +4,7 @@ import { Spinner } from "./Spinner";
 import "./WordCombo.css";
 
 const wordCombineApi = async (firstWord, secondWord) => {
-    const requestTask = fetch(`/wordcombine?wordone=${firstWord}&wordtwo=${secondWord}`);
+    const requestTask = fetch(`/api/wordcombine?wordone=${firstWord}&wordtwo=${secondWord}`);
     const response = (await Promise.all([requestTask, new Promise(r => setTimeout(r, 2000))]))[0];
     return await response.json();
 };

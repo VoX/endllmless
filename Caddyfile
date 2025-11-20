@@ -14,7 +14,7 @@ endless.bitvox.me {
     encode gzip
 
     # Reverse proxy for a specific path
-    reverse_proxy /wordcombine localhost:8080
+    reverse_proxy /api/* localhost:8080
 
     # Serve static files from a specific directory
     root * /app/client/dist
