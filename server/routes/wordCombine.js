@@ -1,5 +1,5 @@
-var express = require('express');
-const OpenAI = require("openai");
+import express from 'express';
+import OpenAI from "openai";
 
 const wordCache = new Map();
 
@@ -56,4 +56,4 @@ router.get('/', async (req, res, next) => {
   res.json(response);
 });
 
-module.exports = router;
+export default router;

@@ -44,7 +44,7 @@ Endllmless is a monorepo web application that replicates "Infinite Craft" mechan
   - **State**: Complex state logic belongs in `gameReducer.js`.
   - **Components**: Located in `client/src/`.
 - **Backend**:
-  - Use CommonJS (`require`).
+  - Use ESM (`import`/`export`).
   - **Routes**: Define new routes in `server/routes/` and register them in `server/app.js`.
   - **AI Integration**: Keep prompt logic within the route handlers (like `wordCombine.js`) or extract to a dedicated service if complexity grows.
 - **Data Flow**:

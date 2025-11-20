@@ -1,9 +1,13 @@
-var createError = require('http-errors');
-var express = require('express');
-var path = require('path');
-var logger = require('morgan');
+import createError from 'http-errors';
+import express from 'express';
+import path from 'path';
+import logger from 'morgan';
+import { fileURLToPath } from 'url';
 
-var wordCombineRouter = require('./routes/wordCombine');
+import wordCombineRouter from './routes/wordCombine.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 var app = express();
 
@@ -30,4 +34,4 @@ app.use(function (err, req, res, next) {
   res.json({ "error": err.status });
 });
 
-module.exports = app;
+export default app;
