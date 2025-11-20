@@ -26,31 +26,59 @@ router.get('/', async (req, res, next) => {
     return res.json(cachedResponse);
   }
 
-  const wordResponse = await openai.chat.completions.create({
-    model: "gpt-4o",
+  const completion = await openai.chat.completions.create({
+    model: "gpt-5.1",
     messages: [
       {
-        "role": "user",
-        "content": `User: Play a word game with me.\n      \n       Here are the rules of the game:\n       - I will give you two words, and you will respond with a conceptual combination of the two.\n    - The two words for this round are: \"${wordOne}\" + \"${wordTwo}\" = ?\n       - The word must be a noun.\n       - The word should not simply be a combination of the two words, unless it is a commonly used word.\n       - Do not elaborate, use single word responses only.\n       - Try not to respond with either input word.\n             - Please prefer very commonplace and physical nouns where possible\n       - Choose the most commonsense interpretation for the combination.\n      \n       Some example rounds:\n       - \"Fire\" + \"Ice\" = \"Water\"\n       - \"Water\" + \"Fire\" = \"Steam\"\n       - \"Water\" + \"Earth\" = \"Mud\"\n       - \"Fire\" + \"Fire\" = \"Volcano\"\n       - \"Steam\" + \"Cloud\" = \"Rain\"\n       - \"Death\" + \"Human\" = \"Corpse\"\n       - \"Tomato\" + \"Bread\" = \"Pizza\"\n       - \"Bread\" + \"Fire\" = \"Toast\"\n       - \"Wind\" + \"Fire\" = \"Smoke\"\n       - \"Smoke\" + \"Smoke\" = \"Cloud\"\n      \n       Again, the two words for this round are: \"${wordOne}\" + \"${wordTwo}\" = ?`
-      }
-    ],
-    max_tokens: 256,
-  });
-
-  const newWord = wordResponse.choices[0].message.content.trim().replace(/[^a-zA-Z0-9 ]/g, '');
-
-  const emojiResponse = await openai.chat.completions.create({
-    model: "gpt-4o",
-    messages: [
+        "role": "system",
+        "content": `Play a word game. Rules:
+- Combine two words into a new conceptual single noun.
+- The word must be a noun.
+- Do not simply combine the words unless it is a commonly used word.
+- Prefer very commonplace and physical nouns.
+- Choose the most commonsense interpretation.
+- Examples:
+  - "Fire" + "Ice" = "Water"
+  - "Water" + "Fire" = "Steam"
+  - "Water" + "Earth" = "Mud"
+  - "Fire" + "Fire" = "Volcano"
+  - "Steam" + "Cloud" = "Rain"
+  - "Death" + "Human" = "Corpse"
+  - "Tomato" + "Bread" = "Pizza"
+  - "Bread" + "Fire" = "Toast"
+  - "Wind" + "Fire" = "Smoke"
+  - "Smoke" + "Smoke" = "Cloud"`
+      },
       {
         "role": "user",
-        "content": `Respond with the emoji that most-literally represents the meaning of the word "${newWord}". Please respond only with an emoji, do not elaborate.`
+        "content": `Combine: "${wordOne}" + "${wordTwo}"`
       }
     ],
-    max_tokens: 256,
+    response_format: {
+      type: "json_schema",
+      json_schema: {
+        name: "word_combination",
+        strict: true,
+        schema: {
+          type: "object",
+          properties: {
+            newWord: {
+              type: "string",
+              description: "The resulting combined word. Single noun."
+            },
+            newEmoji: {
+              type: "string",
+              description: "A single emoji representing the new word."
+            }
+          },
+          required: ["newWord", "newEmoji"],
+          additionalProperties: false
+        }
+      }
+    }
   });
-  const newEmoji = emojiResponse.choices[0].message.content.trim().replaceAll("\"", "");
-  const response = { newWord, newEmoji };
+
+  const response = JSON.parse(completion.choices[0].message.content);
 
   wordCache.set(`${wordOne}+${wordTwo}`, response);
   res.json(response);
