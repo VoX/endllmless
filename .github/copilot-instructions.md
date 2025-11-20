@@ -14,7 +14,7 @@ Endllmless is a monorepo web application that replicates "Infinite Craft" mechan
   - **Styling**: CSS files imported directly into components (e.g., `import "./App.css"`).
 - **Backend (Server)**:
   - **Framework**: Express.js.
-  - **Core Logic**: `routes/wordCombine.js` handles word combination using OpenAI `gpt-4o`.
+  - **Core Logic**: `routes/wordCombine.js` handles word combination using OpenAI `gpt-5.1` with Structured Outputs.
   - **Caching**: In-memory `Map` (`wordCache`) stores combined results to reduce API calls.
 - **Deployment**:
   - **Docker**: Single container architecture running both Caddy and Node.js server.
@@ -53,7 +53,7 @@ Endllmless is a monorepo web application that replicates "Infinite Craft" mechan
 
 ## Specific Patterns
 - **Word Combination**:
-  - Logic: `wordOne` + `wordTwo` -> OpenAI -> New Word -> OpenAI -> Emoji.
+  - Logic: `wordOne` + `wordTwo` -> OpenAI (Structured Output) -> `{ newWord, newEmoji }`.
   - **Ordering**: Words are sorted alphabetically before caching/processing (`wordOne > wordTwo` swap) to ensure "Fire + Water" is the same as "Water + Fire".
 - **Emoji**: The app relies on emojis as the primary visual representation of words.
 
