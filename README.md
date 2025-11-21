@@ -80,11 +80,7 @@ To update the running application with the latest code:
 
 3. **Stop and remove the old container:**
    ```bash
-   # Stop the running container (replace <container_id> with actual ID from `docker ps`)
-   docker stop $(docker ps -q --filter name=endless)
-
-   # Remove the stopped container
-   docker rm $(docker ps -aq --filter name=endless)
+   docker stop $(docker ps -q --filter name=endless) && docker rm $(docker ps -aq --filter name=endless)
    ```
 
 4. **Start the new container:** (Run the same command as in Step 5 above)

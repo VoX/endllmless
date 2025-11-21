@@ -20,7 +20,7 @@ router.get('/', async (req, res, next) => {
                 messages: [
                     {
                         "role": "system",
-                        "content": "Generate 50 unique, interesting, and slightly abstract words or short phrases to complete the sentence 'CRAFT [WORD] THINGS'. The words should be adjectives or nouns acting as adjectives. Examples: 'INFINITE', 'ETERNAL', 'COSMIC', 'FORBIDDEN', 'MYSTERIOUS', 'QUANTUM', 'ELDRITCH', 'BOUNDLESS'."
+                        "content": "Generate 50 unique, interesting, and slightly abstract words or short phrases to complete the sentence 'CRAFT [WORD] THINGS'. Return ONLY the [WORD] part. Do NOT include the words 'CRAFT' or 'THINGS' in the output. The words should be adjectives or nouns acting as adjectives. Examples: 'INFINITE', 'ETERNAL', 'COSMIC', 'FORBIDDEN', 'MYSTERIOUS', 'QUANTUM', 'ELDRITCH', 'BOUNDLESS'."
                     }
                 ],
                 response_format: {
@@ -46,7 +46,7 @@ router.get('/', async (req, res, next) => {
             });
             const data = JSON.parse(completion.choices[0].message.content);
             console.log("generated titles:", data.titles);
-            titleCache = data.titles;
+            titleCache = data.titles.map(t => t.replace(/^CRAFT\s+/i, '').replace(/\s+THINGS$/i, ''));
             currentIndex = 0;
             lastFetchTime = Date.now();
         } catch (error) {
