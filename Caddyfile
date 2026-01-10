@@ -23,4 +23,6 @@ endless.bitvox.me {
     file_server
 }
 
-
+map.bitvox.me {
+    reverse_proxy 172.30.4.105:8100
+}
