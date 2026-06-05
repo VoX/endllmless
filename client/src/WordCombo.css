@@ -25,9 +25,10 @@
 
 /* Resting/empty affordance for the combine row: a faint "? + ? = ?" shown only
    when nothing is selected, in flight, resolved, or errored. Reuses .combo-op
-   for the glyphs so the spacing/weight matches the live equation row exactly;
-   the muted color + reduced opacity make it read as a hint, not live content.
-   aria-hidden in the markup, so it stays out of the live region. */
+   for the glyphs so the glyph shapes/weight match the live equation row
+   (rendered smaller + faint via the font-size + muted color + reduced opacity
+   below so it reads as a hint, not live content). aria-hidden in the markup, so
+   it stays out of the live region. */
 .combo-placeholder {
   display: inline-flex;
   align-items: center;

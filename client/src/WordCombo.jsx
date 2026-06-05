@@ -97,7 +97,7 @@ export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError
                 <>
                     <SelectedWord
                         word={wordState.first}
-                        emoji={words[wordState.first].emoji}
+                        emoji={words[wordState.first]?.emoji}
                         isFirstFound={false}
                     />
                     <span className="combo-op" aria-hidden="true">+</span>
@@ -108,7 +108,7 @@ export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError
             {wordState.second ? (
                 <SelectedWord
                     word={wordState.second}
-                    emoji={words[wordState.second].emoji}
+                    emoji={words[wordState.second]?.emoji}
                     isFirstFound={false}
                 />
             ) : (
@@ -128,7 +128,7 @@ export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError
                         <>
                             <SelectedWord
                                 word={wordState.new}
-                                emoji={words[wordState.new].emoji}
+                                emoji={words[wordState.new]?.emoji}
                                 isFirstFound={wordState.isFirstFound}
                             />
                             <span

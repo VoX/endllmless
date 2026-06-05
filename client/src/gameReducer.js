@@ -54,8 +54,17 @@ export const migrateWords = (stored) => {
         } else if (value && typeof value === "object") {
             migrated[word] = {
                 emoji: typeof value.emoji === "string" ? value.emoji : "",
-                // Preserve a well-formed source pair; otherwise treat as base.
-                from: Array.isArray(value.from) && value.from.length === 2 ? value.from : null,
+                // Preserve a well-formed source pair; otherwise treat as base. Both
+                // elements must be strings — `from` is now persisted user data a
+                // future surface (a collection / tech-tree view) may render
+                // directly, so a garbled pair like [null, 5] shouldn't survive as
+                // a "null + 5" lineage caption.
+                from:
+                    Array.isArray(value.from) &&
+                    value.from.length === 2 &&
+                    value.from.every((w) => typeof w === "string")
+                        ? value.from
+                        : null,
             };
         } else {
             migrated[word] = { emoji: "", from: null };
@@ -136,8 +145,17 @@ function innerGameReducer(state, action) {
             };
         }
         case 'new_word': {
-            const existing = state.words[action.word];
-            const isFirstFound = existing === undefined;
+            // Own-property check, NOT `state.words[action.word] === undefined`:
+            // `words` is a plain object, so a word that collides with an inherited
+            // Object.prototype member ("constructor", "toString", "valueOf",
+            // "hasOwnProperty", …) would read back the inherited FUNCTION instead
+            // of undefined. That would (a) wrongly mark a true first find as a
+            // rediscovery and (b) store the inherited function as the entry, which
+            // then blanks/crashes every downstream `.emoji` read. The server
+            // returns newWord verbatim from the model, and "constructor" is an
+            // ordinary English word it can emit, so this is reachable in prod.
+            const isFirstFound = !Object.prototype.hasOwnProperty.call(state.words, action.word);
+            const existing = isFirstFound ? undefined : state.words[action.word];
             // First path wins: record the source pair only on first discovery and
             // never clobber an existing entry's `from` on rediscovery (matches the
             // canonical-once intent). On rediscovery we keep the stored entry as-is

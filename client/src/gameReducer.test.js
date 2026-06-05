@@ -74,6 +74,22 @@ describe('gameReducer: new_word / isFirstFound', () => {
     expect(next.wordState.error).toBe('');
     expect(next.wordState.new).toBe('steam');
   });
+
+  it('treats a prototype-named word ("constructor") as a real first find, not a rediscovery', () => {
+    // `words` is a plain object, so `words["constructor"]` reads the inherited
+    // Object.prototype.constructor FUNCTION rather than undefined. A direct
+    // `=== undefined` check would mis-flag this as already discovered AND store
+    // the function as the entry, blanking/crashing every downstream `.emoji`
+    // read. The model can emit "constructor" (a common English word), so this
+    // must be handled with own-property semantics.
+    const state = pairState();
+    const next = gameReducer(state, { type: 'new_word', word: 'constructor', emoji: '🏗️' });
+
+    expect(next.wordState.isFirstFound).toBe(true);
+    // The entry is the real { emoji, from } object, NOT the inherited function.
+    expect(next.words.constructor).toEqual({ emoji: '🏗️', from: ['fire', 'water'] });
+    expect(typeof next.words.constructor).toBe('object');
+  });
 });
 
 describe('gameReducer: new_word / recipe lineage (`from`)', () => {
@@ -135,6 +151,16 @@ describe('migrateWords', () => {
       bad: { emoji: '', from: null },
       partial: { emoji: '', from: null },
       halfpair: { emoji: '🌫️', from: null }, // malformed from -> treated as base
+    });
+  });
+
+  it('rejects a 2-element `from` whose elements are not both strings (-> base)', () => {
+    // A persisted/garbled pair like [null, 5] is the right length but not a real
+    // lineage; it must collapse to null so a future surface never renders a
+    // "null + 5" caption from it.
+    const garbledPair = { steam: { emoji: '♨️', from: [null, 5] } };
+    expect(migrateWords(garbledPair)).toEqual({
+      steam: { emoji: '♨️', from: null },
     });
   });
 
