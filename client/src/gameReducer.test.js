@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { gameReducer, initialGameState, baseWords } from './gameReducer.js';
+import { gameReducer, initialGameState, baseWords, migrateWords } from './gameReducer.js';
 
 // Helper: a state that already has a first+second selected and is mid-flight, so
 // new_word / loading_error transitions have a concrete pair to act on.
@@ -47,8 +47,8 @@ describe('gameReducer: new_word / isFirstFound', () => {
     expect(next.wordState.isFirstFound).toBe(true);
     expect(next.wordState.loading).toBe(false);
     expect(next.wordState.foundDelay).toBe(true);
-    // The new word is merged into the discovered set with its emoji.
-    expect(next.words.steam).toBe('');
+    // The new word is merged into the discovered set as { emoji, from }.
+    expect(next.words.steam.emoji).toBe('');
     // The selected pair is preserved on the result transition.
     expect(next.wordState.first).toBe('fire');
     expect(next.wordState.second).toBe('water');
@@ -62,8 +62,10 @@ describe('gameReducer: new_word / isFirstFound', () => {
 
     expect(next.wordState.new).toBe('water');
     expect(next.wordState.isFirstFound).toBe(false);
-    // Re-merging keeps the existing emoji slot (overwritten with the same value).
-    expect(next.words.water).toBe('');
+    // Rediscovery preserves the existing entry untouched (first path wins), so
+    // the base word keeps its shipped emoji rather than being clobbered by the
+    // action's emoji.
+    expect(next.words.water.emoji).toBe('💦');
   });
 
   it('clears any stale error so a success never renders next to a failure message', () => {
@@ -71,6 +73,76 @@ describe('gameReducer: new_word / isFirstFound', () => {
     const next = gameReducer(state, { type: 'new_word', word: 'steam', emoji: '' });
     expect(next.wordState.error).toBe('');
     expect(next.wordState.new).toBe('steam');
+  });
+});
+
+describe('gameReducer: new_word / recipe lineage (`from`)', () => {
+  it('records the source pair on a first find', () => {
+    const state = pairState(); // first: 'fire', second: 'water'
+    const next = gameReducer(state, { type: 'new_word', word: 'steam', emoji: '♨️' });
+
+    expect(next.words.steam).toEqual({ emoji: '♨️', from: ['fire', 'water'] });
+  });
+
+  it('does NOT change a word\'s stored `from` on rediscovery (first path wins)', () => {
+    // Pre-seed "steam" as discovered from a specific pair, then rediscover it via
+    // a DIFFERENT pair. The original lineage and emoji must survive untouched.
+    const seeded = {
+      ...initialGameState,
+      words: { ...initialGameState.words, steam: { emoji: '♨️', from: ['fire', 'water'] } },
+      wordState: { ...initialGameState.wordState, first: 'earth', second: 'wind', loading: true },
+    };
+    const next = gameReducer(seeded, { type: 'new_word', word: 'steam', emoji: '🆕' });
+
+    expect(next.wordState.isFirstFound).toBe(false);
+    // `from` is preserved AND the emoji is not clobbered by the rediscovery.
+    expect(next.words.steam).toEqual({ emoji: '♨️', from: ['fire', 'water'] });
+  });
+
+  it('keeps base words at from:null and never overwrites their lineage', () => {
+    // "water" ships as a base word with from:null. Rediscovering it must not
+    // invent a source pair for it.
+    const state = pairState(); // first: 'fire', second: 'water'
+    expect(initialGameState.words.water.from).toBe(null);
+    const next = gameReducer(state, { type: 'new_word', word: 'water', emoji: '💦' });
+    expect(next.words.water.from).toBe(null);
+  });
+});
+
+describe('migrateWords', () => {
+  it('coerces a legacy string-emoji map to the { emoji, from:null } shape without throwing', () => {
+    // The OLD persisted shape: { word: "🔥" }.
+    const legacy = { fire: '🔥', steam: '♨️' };
+    const migrated = migrateWords(legacy);
+    expect(migrated).toEqual({
+      fire: { emoji: '🔥', from: null },
+      steam: { emoji: '♨️', from: null },
+    });
+  });
+
+  it('passes through the current { emoji, from } shape, preserving a valid source pair', () => {
+    const current = {
+      water: { emoji: '💦', from: null },
+      steam: { emoji: '♨️', from: ['fire', 'water'] },
+    };
+    expect(migrateWords(current)).toEqual(current);
+  });
+
+  it('drops a garbled entry to a safe { emoji:"", from:null } instead of crashing a read', () => {
+    const mixed = { good: '🔥', bad: 123, partial: { foo: 'bar' }, halfpair: { emoji: '🌫️', from: ['only'] } };
+    expect(migrateWords(mixed)).toEqual({
+      good: { emoji: '🔥', from: null },
+      bad: { emoji: '', from: null },
+      partial: { emoji: '', from: null },
+      halfpair: { emoji: '🌫️', from: null }, // malformed from -> treated as base
+    });
+  });
+
+  it('returns null for non-object / array / falsy blobs so the caller falls back to defaults', () => {
+    expect(migrateWords(null)).toBe(null);
+    expect(migrateWords(undefined)).toBe(null);
+    expect(migrateWords('nope')).toBe(null);
+    expect(migrateWords([1, 2, 3])).toBe(null);
   });
 });
 
@@ -128,14 +200,14 @@ describe('gameReducer: reset_words + cancel_reset', () => {
     // Start from a dirtied state: extra discovered word + an active selection.
     const dirty = {
       ...initialGameState,
-      words: { ...initialGameState.words, steam: '' },
+      words: { ...initialGameState.words, steam: { emoji: '♨️', from: ['fire', 'water'] } },
       wordState: { ...initialGameState.wordState, first: 'fire', second: 'water' },
     };
 
     const armed = gameReducer(dirty, { type: 'reset_words' });
     expect(armed.confirmReset).toBe(true);
     // Nothing destroyed yet.
-    expect(armed.words.steam).toBe('');
+    expect(armed.words.steam).toEqual({ emoji: '♨️', from: ['fire', 'water'] });
     expect(armed.wordState.first).toBe('fire');
 
     const reset = gameReducer(armed, { type: 'reset_words' });
@@ -148,7 +220,7 @@ describe('gameReducer: reset_words + cancel_reset', () => {
   it('cancel_reset disarms a pending confirmation without wiping progress', () => {
     const dirty = {
       ...initialGameState,
-      words: { ...initialGameState.words, steam: '' },
+      words: { ...initialGameState.words, steam: { emoji: '♨️', from: ['fire', 'water'] } },
     };
     const armed = gameReducer(dirty, { type: 'reset_words' });
     expect(armed.confirmReset).toBe(true);
@@ -156,7 +228,7 @@ describe('gameReducer: reset_words + cancel_reset', () => {
     const cancelled = gameReducer(armed, { type: 'cancel_reset' });
     expect(cancelled.confirmReset).toBe(false);
     // Progress survives the cancel.
-    expect(cancelled.words.steam).toBe('');
+    expect(cancelled.words.steam).toEqual({ emoji: '♨️', from: ['fire', 'water'] });
   });
 });
 

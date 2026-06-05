@@ -165,7 +165,7 @@ export const GameButtonsContainer = ({ onClickWord, words, queueEmpty }) => {
               aria-label={word}
               aria-pressed={isSelected}
             >
-              <p className="game-button-emoji" aria-hidden="true">{words[word]}</p>
+              <p className="game-button-emoji" aria-hidden="true">{words[word].emoji}</p>
               <p className="game-button-label">{word}</p>
             </button>
           </div>

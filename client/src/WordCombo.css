@@ -23,6 +23,21 @@
   min-width: 1ch;
 }
 
+/* Resting/empty affordance for the combine row: a faint "? + ? = ?" shown only
+   when nothing is selected, in flight, resolved, or errored. Reuses .combo-op
+   for the glyphs so the spacing/weight matches the live equation row exactly;
+   the muted color + reduced opacity make it read as a hint, not live content.
+   aria-hidden in the markup, so it stays out of the live region. */
+.combo-placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  opacity: 0.6;
+  user-select: none;
+}
+
 /* Small label beside the combine result: "New!" vs "already discovered". */
 .result-badge {
   font-size: 0.6rem;
@@ -45,6 +60,19 @@
   font-weight: 600;
   text-transform: none;
   letter-spacing: 0;
+}
+
+/* Muted "X + Y" recipe line shown under the result badge on a fresh find. Sits
+   on its own line (block) so it reads as a caption beneath the new word rather
+   than trailing the badge. Sized/colored to recede like .result-badge — present
+   but not competing with the discovered word. aria-hidden in the markup, so this
+   is purely visual. */
+.combo-lineage {
+  display: block;
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+  white-space: nowrap;
 }
 
 /* Inline failure message for a combine that errored (rate limit / network /
