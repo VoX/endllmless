@@ -1,22 +1,60 @@
 .App {
   text-align: center;
+  min-height: 100vh;
+  padding-bottom: var(--space-4);
 
   .container {
     align-items: center;
     display: flex;
     flex-direction: column;
-    margin: auto;
-    max-width: none;
+    margin: 0 auto;
+    max-width: 960px;
     width: 100%;
-    justify-content: center;
+    justify-content: flex-start;
 
     .topbar {
-      background: #142d4c;
+      background: var(--bg);
       position: sticky;
       top: 0;
+      z-index: 10;
       width: 100%;
+      padding: var(--space-3) var(--space-3) var(--space-2);
+      border-bottom: 1px solid var(--shadow-color);
+      box-shadow: var(--shadow);
     }
   }
 }
 
+/* Title row: heading centered, theme toggle pinned to the right. */
+.title-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.4rem;
+  margin: 0 0 var(--space-2);
+}
 
+.title-heading {
+  margin: 0;
+  font-size: clamp(1.25rem, 3.5vw, 2rem);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1.15;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.title-header .theme-toggle {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Reset control, centered under the grid. */
+.reset-bar {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--space-4);
+}

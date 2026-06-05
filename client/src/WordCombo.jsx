@@ -41,7 +41,7 @@ export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError
     }, [words]);
 
     return (
-        <div className="word-combo" style={{}}>
+        <div className="word-combo">
             {wordState.first ? (
                 <>
                     <SelectedWord
@@ -49,7 +49,7 @@ export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError
                         emoji={words[wordState.first]}
                         isFirstFound={false}
                     />
-                    <span>+</span>
+                    <span className="combo-op" aria-hidden="true">+</span>
                 </>
             ) : (
                 <></>
@@ -63,18 +63,24 @@ export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError
             ) : (
                 <></>
             )}
-            <span>{wordState.first && wordState.second ? "= " : ""}</span>
-            {wordState.new ? (
-                <SelectedWord
-                    word={wordState.new}
-                    emoji={words[wordState.new]}
-                    isFirstFound={wordState.isFirstFound}
-                />
-            ) : wordState.loading ? (
-                <Spinner />
+            {wordState.first && wordState.second ? (
+                <span className="combo-op" aria-hidden="true">=</span>
             ) : (
                 ""
             )}
+            <div className="combo-result" role="status" aria-live="polite" aria-atomic="true">
+                {wordState.new ? (
+                    <SelectedWord
+                        word={wordState.new}
+                        emoji={words[wordState.new]}
+                        isFirstFound={wordState.isFirstFound}
+                    />
+                ) : wordState.loading ? (
+                    <Spinner />
+                ) : (
+                    ""
+                )}
+            </div>
         </div>
     );
 };

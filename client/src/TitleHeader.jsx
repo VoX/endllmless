@@ -1,4 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
+import { ThemeToggle } from "./ThemeToggle";
 
 export const TitleHeader = () => {
     const [titleWord, setTitleWord] = useState("Endless");
@@ -23,10 +24,11 @@ export const TitleHeader = () => {
     }, []);
 
     return (
-        <div>
-            <h2 style={{ textTransform: "uppercase" }}>
+        <div className="title-header">
+            <h1 className="title-heading">
                 CRAFT {titleWord} THINGS
-            </h2>
+            </h1>
+            <ThemeToggle />
         </div>
     );
 };

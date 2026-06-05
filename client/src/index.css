@@ -1,3 +1,105 @@
+:root {
+  /* ---- Theme-agnostic tokens ---- */
+  /* Spacing scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 16px;
+  --space-4: 24px;
+
+  /* Shape */
+  --radius: 10px;
+  --shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+
+  /* Fixed contrast color for text on the danger fill (both themes). */
+  --on-danger: #ffffff;
+
+  /* ---- Dark palette (default) ---- */
+  /* Surfaces */
+  --bg: #142d4c;
+  --surface: #1b3a5f;
+  --tile-bg: #9fd3c7;
+  --tile-hover: #b9e3d9;
+  --tile-hover-text: #142d4c;
+  --tile-selected: #ffe066;
+  --tile-text: #142d4c;
+  --accent: #ffd700;
+
+  /* Text */
+  --text: #ececec;
+  --text-muted: #9bb0c4;
+
+  /* Feedback */
+  --danger: #e5534b;
+
+  /* Decoration */
+  --shadow-color: #385170;
+
+  /* Spinner */
+  --spinner-track: rgba(255, 255, 255, 0.18);
+  --spinner-head: var(--accent);
+}
+
+/* ---- Light palette ---- */
+/* Shared token set so the OS-preference block and the explicit toggle stay
+   in sync. Applied via prefers-color-scheme below and [data-theme="light"]. */
+:root[data-theme="light"] {
+  --bg: #eef3f8;
+  --surface: #ffffff;
+  --tile-bg: #9fd3c7;
+  --tile-hover: #b9e3d9;
+  --tile-hover-text: #142d4c;
+  --tile-selected: #ffe066;
+  --tile-text: #142d4c;
+  --accent: #c79a00;
+
+  --text: #1b3a5f;
+  --text-muted: #5b7088;
+
+  --danger: #c0392b;
+
+  --shadow-color: #b9c8d8;
+  --shadow: 0 2px 6px rgba(20, 45, 76, 0.18);
+
+  --spinner-track: rgba(20, 45, 76, 0.15);
+  --spinner-head: var(--accent);
+}
+
+/* Default to light only when the OS asks for it AND the user hasn't chosen
+   explicitly. The explicit [data-theme] rules come last so a manual choice
+   always wins over the OS preference. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --bg: #eef3f8;
+    --surface: #ffffff;
+    --tile-hover: #b9e3d9;
+    --tile-hover-text: #142d4c;
+    --tile-text: #142d4c;
+    --accent: #c79a00;
+    --text: #1b3a5f;
+    --text-muted: #5b7088;
+    --danger: #c0392b;
+    --shadow-color: #b9c8d8;
+    --shadow: 0 2px 6px rgba(20, 45, 76, 0.18);
+    --spinner-track: rgba(20, 45, 76, 0.15);
+  }
+}
+
+/* Explicit dark override (beats the OS-light media query above). */
+:root[data-theme="dark"] {
+  --bg: #142d4c;
+  --surface: #1b3a5f;
+  --tile-hover: #b9e3d9;
+  --tile-hover-text: #142d4c;
+  --tile-text: #142d4c;
+  --accent: #ffd700;
+  --text: #ececec;
+  --text-muted: #9bb0c4;
+  --danger: #e5534b;
+  --shadow-color: #385170;
+  --shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  --spinner-track: rgba(255, 255, 255, 0.18);
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
@@ -5,8 +107,8 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: #142d4c;
-  color: #ececec;
+  background: var(--bg);
+  color: var(--text);
   font-size: calc(10px + 2vmin);
 }
 
@@ -16,21 +118,95 @@ code {
 }
 
 button {
-  /* background-color: #baadd3; */
-  background-color: #9fd3c7;
-  /* box-shadow: 0px 0px 1px 2px #0ff; */
-  box-shadow: 0px 0px 1px 2px #385170;
+  background-color: var(--tile-bg);
+  box-shadow: 0px 0px 1px 2px var(--shadow-color);
   display: flex-inline;
   font-weight: bold;
   font-size: large;
   justify-content: space-between;
-  margin: 4px;
+  margin: var(--space-1);
 }
 
 button:hover {
-  background-color: #ffffff;
-  color: #671199;
+  background-color: var(--tile-hover);
+  color: var(--tile-hover-text);
   font-weight: bold;
+}
+
+/* Small, unobtrusive icon button; overrides the shared button styling above. */
+.theme-toggle {
+  background: transparent;
+  box-shadow: none;
+  border: 1px solid var(--shadow-color);
+  border-radius: var(--radius);
+  color: var(--text);
+  width: 2.2rem;
+  height: 2.2rem;
+  padding: 0;
+  margin: 0;
+  font-size: 1.1rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.theme-toggle:hover {
+  background: var(--surface);
+  color: var(--accent);
+}
+
+/* Secondary/outline reset button, distinct from the teal tiles. */
+.reset-button {
+  background: transparent;
+  box-shadow: none;
+  border: 1px solid var(--shadow-color);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: var(--space-2) var(--space-3);
+  margin: 0;
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.reset-button:hover {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+.reset-button.confirm {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.reset-button.confirm:hover {
+  background: var(--danger);
+  color: var(--on-danger);
+  border-color: var(--danger);
+}
+
+/* ---- Focus visibility (keyboard) ---- */
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Tile keeps a clear ring even while lifted/animating. */
+.game-button:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Don't show the focus ring for pointer interactions. */
+:focus:not(:focus-visible) {
+  outline: none;
 }
 
 /* Define the animation */

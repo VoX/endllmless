@@ -1,5 +1,13 @@
 export const ResetButton = ({ confirmReset, resetWords }) => {
     return (
-        confirmReset ? <button onClick={resetWords}>Are You Sure?</button> : <button onClick={resetWords}>Reset Words</button>
+        <div className="reset-bar">
+            <button
+                type="button"
+                className={`reset-button${confirmReset ? " confirm" : ""}`}
+                onClick={resetWords}
+            >
+                {confirmReset ? "Are You Sure?" : "Reset Words"}
+            </button>
+        </div>
     );
 };
