@@ -1,6 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import express from 'express';
 
+// The suite drives the route over HTTP via the global fetch (Node 18+). Fail
+// loudly with an actionable message on an older runtime instead of an opaque
+// "fetch is not defined" mid-test.
+if (typeof fetch !== 'function') {
+  throw new Error('These tests require a global fetch (Node 18+). Upgrade Node.');
+}
+
 // Mock the OpenAI SDK so the route never touches the network. vi.mock is hoisted
 // above the imports, so the shared mock fn is created via vi.hoisted to stay in
 // scope inside the factory.
@@ -50,7 +57,12 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await new Promise((resolve) => server.close(resolve));
+  // Guard against a test that throws before the listener binds: closing an
+  // undefined server here would mask the real failure with a secondary error.
+  if (server) {
+    await new Promise((resolve) => server.close(resolve));
+    server = undefined;
+  }
 });
 
 const get = (qs) => fetch(`${baseUrl}/api/wordcombine?${qs}`);
@@ -129,6 +141,18 @@ describe('wordCombine route: cache-key normalization', () => {
     expect(createMock).toHaveBeenCalledTimes(1);
   });
 
+  it('collapses a mixed-case pair whose ASCII order flips after lowercasing', async () => {
+    // Guards the FINAL .sort() on the lowered key. The display sort keeps
+    // "Zoo"+"apple" as [Zoo, apple] (Z<a) but "Apple"+"zoo" as [Apple, zoo];
+    // only re-sorting the lowered pair makes both collapse to "apple+zoo".
+    // Every other test pair has matching case-sensitive/insensitive order, so
+    // this is the one case that fails if the final .sort() is removed.
+    await get('wordone=Zoo&wordtwo=apple');
+    await get('wordone=Apple&wordtwo=zoo');
+
+    expect(createMock).toHaveBeenCalledTimes(1);
+  });
+
   it('still distinguishes genuinely different pairs (separate LLM calls)', async () => {
     createMock.mockResolvedValueOnce(okCompletion('Steam', ''));
     createMock.mockResolvedValueOnce(okCompletion('Mud', ''));
@@ -137,6 +161,29 @@ describe('wordCombine route: cache-key normalization', () => {
     await get('wordone=earth&wordtwo=water');
 
     expect(createMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('wordCombine route: success response body', () => {
+  it('round-trips the model payload (newWord + newEmoji) to the client verbatim', async () => {
+    createMock.mockResolvedValueOnce(okCompletion('Steam', '💨'));
+
+    const res = await get('wordone=fire&wordtwo=water');
+    expect(res.status).toBe(200);
+    // Pins the exact body shape: an accidental wrapper, transform, or dropped
+    // field would slip past the equality-to-each-other cache assertions.
+    expect(await res.json()).toEqual({ newWord: 'Steam', newEmoji: '💨' });
+  });
+
+  it('caches and replays that exact payload on a repeat request', async () => {
+    createMock.mockResolvedValueOnce(okCompletion('Mud', '🟤'));
+
+    const first = await (await get('wordone=earth&wordtwo=water')).json();
+    const second = await (await get('wordone=Water&wordtwo=Earth')).json();
+
+    expect(first).toEqual({ newWord: 'Mud', newEmoji: '🟤' });
+    expect(second).toEqual(first);
+    expect(createMock).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -156,5 +203,119 @@ describe('wordCombine route: upstream failures', () => {
     const good = await get('wordone=fire&wordtwo=lava');
     expect(good.status).toBe(200);
     expect(createMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns 502 and does not poison the cache when the SDK throws (network)', async () => {
+    // The most likely production failure, and the one that proves the mock
+    // never hit the network even on the error path.
+    createMock.mockRejectedValueOnce(new Error('network'));
+
+    const bad = await get('wordone=fire&wordtwo=cloud');
+    expect(bad.status).toBe(502);
+
+    // Identical request retries against the (now succeeding) model.
+    createMock.mockResolvedValueOnce(okCompletion('Rain', '🌧️'));
+    const good = await get('wordone=fire&wordtwo=cloud');
+    expect(good.status).toBe(200);
+    expect(await good.json()).toEqual({ newWord: 'Rain', newEmoji: '🌧️' });
+    expect(createMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns 502 when message content is null (refusal / content filter)', async () => {
+    createMock.mockResolvedValueOnce({ choices: [{ message: { content: null } }] });
+
+    const bad = await get('wordone=fire&wordtwo=void');
+    expect(bad.status).toBe(502);
+  });
+});
+
+describe('wordCombine route: sanitization (pinned current behavior)', () => {
+  it('passes double quotes through into the prompt unescaped (accepted low-risk)', async () => {
+    // Pins the deliberate decision NOT to strip prompt-structural chars. If a
+    // future change starts escaping/stripping quotes, this assertion flips and
+    // forces the decision to be revisited.
+    const res = await get('wordone=a%22%20%2B%20%22b&wordtwo=water');
+    expect(res.status).toBe(200);
+
+    const userMsg = createMock.mock.calls[0][0].messages[1].content;
+    // Sorted alphabetically: 'a" + "b' < 'water'.
+    expect(userMsg).toBe('Combine: "a" + "b" + "water"');
+  });
+
+  it('treats a zero-width-wrapped word as DISTINCT from the bare word', async () => {
+    // U+200B is neither a control char nor matched by \s, so it survives
+    // sanitization -> separate cache key -> separate LLM call. Pins that
+    // Unicode-format normalization is currently out of scope.
+    await get('wordone=%E2%80%8Bfire%E2%80%8B&wordtwo=water');
+    await get('wordone=fire&wordtwo=water');
+
+    expect(createMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('rate limiter (server/app.js middleware)', () => {
+  let rlServer;
+  let rlBase;
+
+  // Build an app that mounts the real rateLimit middleware in front of the
+  // (mocked) wordCombine router, mirroring app.js. Fresh import per test so the
+  // module-level rateHits counter starts empty.
+  async function buildRateLimitedApp() {
+    const { rateLimit, RATE_MAX } = await import('../app.js');
+    const { default: wordCombineRouter } = await import('./wordCombine.js');
+    const a = express();
+    a.set('trust proxy', 1); // honor X-Forwarded-For like behind Caddy
+    a.use('/api/', rateLimit);
+    a.use('/api/wordcombine', wordCombineRouter);
+    a.use((req, res) => res.status(404).json({ error: 'not_found' }));
+    await new Promise((resolve) => {
+      rlServer = a.listen(0, () => {
+        rlBase = `http://127.0.0.1:${rlServer.address().port}`;
+        resolve();
+      });
+    });
+    return RATE_MAX;
+  }
+
+  afterEach(async () => {
+    if (rlServer) {
+      await new Promise((resolve) => rlServer.close(resolve));
+      rlServer = undefined;
+    }
+  });
+
+  it('allows RATE_MAX requests then 429s with a numeric Retry-After', async () => {
+    const max = await buildRateLimitedApp();
+    // A single distinct pair is enough: rateLimit runs before the router, so
+    // even cache hits increment the counter.
+    const url = `${rlBase}/api/wordcombine?wordone=fire&wordtwo=water`;
+
+    for (let i = 0; i < max; i++) {
+      const res = await fetch(url);
+      expect(res.status).toBe(200);
+    }
+    const limited = await fetch(url);
+    expect(limited.status).toBe(429);
+    expect(await limited.json()).toEqual({ error: 'rate_limited' });
+
+    const retryAfter = limited.headers.get('retry-after');
+    expect(retryAfter).not.toBeNull();
+    expect(Number.isNaN(Number(retryAfter))).toBe(false);
+    expect(Number(retryAfter)).toBeGreaterThan(0);
+  });
+
+  it('keys the window per-IP off X-Forwarded-For (trust proxy)', async () => {
+    const max = await buildRateLimitedApp();
+    const url = `${rlBase}/api/wordcombine?wordone=fire&wordtwo=water`;
+
+    // Drain client A to its limit.
+    for (let i = 0; i < max; i++) {
+      const res = await fetch(url, { headers: { 'X-Forwarded-For': '203.0.113.1' } });
+      expect(res.status).toBe(200);
+    }
+    expect((await fetch(url, { headers: { 'X-Forwarded-For': '203.0.113.1' } })).status).toBe(429);
+
+    // A different forwarded IP has its own untouched counter.
+    expect((await fetch(url, { headers: { 'X-Forwarded-For': '203.0.113.2' } })).status).toBe(200);
   });
 });

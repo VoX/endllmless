@@ -22,6 +22,16 @@ const MAX_WORD_LEN = 40;
 // empty/too long after cleanup, so the caller can 400. The endpoint is public
 // and unauthenticated; this bounds prompt/token cost and cache-key abuse without
 // affecting normal play (real words are short).
+//
+// Deliberately NOT neutralized (accepted as low-risk, pinned by tests):
+//   - Double quotes / other prompt-structural chars: a crafted value can add
+//     structure inside the `Combine: "..."` slot, but it's capped at 40 chars
+//     and the system prompt constrains output to the word-game JSON schema, so
+//     the blast radius is a slightly weirder word, not a real injection.
+//   - Zero-width / format (Cf) chars (e.g. U+200B): not in the control range
+//     and not matched by \s, so a zero-width-wrapped word survives as its own
+//     distinct word/cache entry. Full Unicode normalization is out of scope;
+//     the 40-char cap + 10k-entry clear bound the cache-pollution upside.
 function sanitizeWord(raw) {
   if (typeof raw !== 'string') return null;
   const cleaned = raw
@@ -55,8 +65,13 @@ router.get('/', async (req, res, next) => {
 
   // Normalize the cache key so case/whitespace variants collide on one entry:
   // "Fire", "fire", and " fire " all map to the same cached result. The lowered
-  // pair is re-sorted because lowercasing can change ASCII ordering relative to
-  // the (already sorted) display words.
+  // pair is re-sorted because lowercasing can flip the ASCII order between an
+  // uppercase-first and lowercase-first variant of the SAME pair, splitting them
+  // across two entries without it. Example: the display sort keeps "Zoo"+"apple"
+  // as ["Zoo","apple"] (Z=90 < a=97) but "Apple"+"zoo" as ["Apple","zoo"];
+  // lowering gives ["zoo","apple"] vs ["apple","zoo"], so the final .sort() is
+  // what makes both collapse to "apple+zoo". (Removing it still works for any
+  // pair whose case-sensitive and case-insensitive ordering match.)
   const [keyOne, keyTwo] = [wordOne.toLowerCase(), wordTwo.toLowerCase()].sort();
   const cacheKey = `${keyOne}+${keyTwo}`;
   if (wordCache.has(cacheKey)) {

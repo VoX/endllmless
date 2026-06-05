@@ -25,10 +25,10 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Each novel /api/wordcombine request is a real billed OpenRouter call, so this
 // caps how fast a single client can drain the API budget. Tiny in-memory
 // fixed-window counter (no dependency); fine for a single-process word game.
-const RATE_WINDOW_MS = 60 * 1000;
-const RATE_MAX = 30;
+export const RATE_WINDOW_MS = 60 * 1000;
+export const RATE_MAX = 30;
 const rateHits = new Map();
-function rateLimit(req, res, next) {
+export function rateLimit(req, res, next) {
   const now = Date.now();
   const ip = req.ip || 'unknown';
   let entry = rateHits.get(ip);
