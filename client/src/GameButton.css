@@ -28,6 +28,11 @@
      so it can hug the left edge without touching the flex layout of the label/
      emoji or shifting any other tile. */
   position: relative;
+  /* Leave clearance below the sticky, z-indexed topbar (App.css .topbar) when a
+     freshly crafted tile is scrolled into view, so it never lands flush behind
+     the bar. The page scrolls on the window (no inner scroll container), so
+     scrollIntoView honors this margin against the viewport top. */
+  scroll-margin-top: var(--space-4);
   background-color: var(--tile-bg);
   color: var(--tile-text);
   /* Theme-aware border instead of a hardcoded near-black rgba, which left a
@@ -120,14 +125,18 @@
 }
 
 /* ---- Persistent new ring ----
-   A thin static accent ring on the most recently crafted tile, replacing the
-   1s tada once it fades so a brand-new word doesn't instantly blend back in.
-   Composes the theme --shadow with an accent ring + a soft --accent glow; the
-   inset --shadow-color hairline keeps the ring crisp against the tile fill.
-   Static by construction, so it's reduced-motion-safe with no extra guard. The
-   JSX suppresses .is-new while a tile is selected/fading, so this never stacks
-   with those backgrounds. Re-asserted on :hover because the base :hover rule
-   resets box-shadow to var(--shadow), which would otherwise drop the ring. */
+   A thin static accent ring on the most recently crafted tile so a brand-new
+   word doesn't instantly blend back in. It runs alongside the 1s tada for the
+   first ~1s (tada animates transform:scale, this sets box-shadow — different
+   properties, so they compose cleanly) and then persists after the tada ends,
+   until the next selection clears it. Layers: the theme --shadow, a 2px --accent
+   ring, a soft --shadow-color glow, and an inset --shadow-color hairline that
+   keeps the ring crisp against the tile fill (the glow + hairline use
+   --shadow-color, not --accent — only the 2px ring is accent-colored). Static by
+   construction, so it's reduced-motion-safe with no extra guard. The JSX
+   suppresses .is-new while a tile is selected/fading, so this never stacks with
+   those backgrounds. Re-asserted on :hover because the base :hover rule resets
+   box-shadow to var(--shadow), which would otherwise drop the ring. */
 .game-button.is-new,
 .game-button.is-new:hover {
   box-shadow: var(--shadow), 0 0 0 2px var(--accent),

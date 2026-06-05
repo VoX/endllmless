@@ -62,16 +62,34 @@ export const GameButtonsContainer = ({ onClickWord, words }) => {
       setNewWord(tadaTarget);
       const tileEl = tileRefs.current.get(tadaTarget);
       if (tileEl && typeof tileEl.scrollIntoView === "function") {
-        tileEl.scrollIntoView({
-          behavior: prefersReducedMotion() ? "auto" : "smooth",
-          block: "nearest",
-        });
+        // Only scroll if the new tile is actually off-screen. Without this, every
+        // combine yanks the viewport to the bottom of the grid — stealing the
+        // player away from the result celebration playing in the sticky topbar,
+        // and stacking N fighting smooth-scrolls on an N-deep queued batch. When
+        // the tile is already visible, the celebration is already on screen, so
+        // there's nothing to scroll to. (scroll-margin-top in the CSS keeps the
+        // tile clear of the sticky topbar when we do scroll.)
+        const r = tileEl.getBoundingClientRect();
+        const visible = r.top >= 0 && r.bottom <= window.innerHeight;
+        if (!visible) {
+          tileEl.scrollIntoView({
+            behavior: prefersReducedMotion() ? "auto" : "smooth",
+            block: "nearest",
+          });
+        }
       }
     }
     if (selectedWords.length === 2 || selectedWords.length === 1) {
       setFadeOutWords(selectedWords);
       setTimeout(() => setFadeOutWords([]), 1200);
       setSelectedWords([]);
+    }
+    // The word set shrank (reset back to the 5 defaults, or any future removal):
+    // the new/tada highlights point at a tile that no longer exists, so clear the
+    // transient state instead of letting it dangle as stale refs.
+    if (currentWords.length < prevWords.current.length) {
+      setNewWord(null);
+      setTadaWord(null);
     }
     prevWords.current = currentWords;
   }, [words]);
@@ -106,9 +124,12 @@ export const GameButtonsContainer = ({ onClickWord, words }) => {
         let btnClass = "game-button";
         if (baseWordSet.has(word)) btnClass += " base-tile";
         if (tadaWord === word) btnClass += " tada";
-        // Persistent new ring, suppressed while selected/fading so it doesn't
-        // stack with those backgrounds (the tile that was just combined is the
-        // new one, and its fade-out runs first).
+        // Persistent new ring. The suppression below is defensive only: the new
+        // tile is never the one that fades out (fadeOutWords holds the two SOURCE
+        // tiles), and handleClick clears newWord before any tile can become
+        // selected again — so is-new can't actually co-occur with
+        // selected/fade-out. Guarding anyway keeps the backgrounds from stacking
+        // if those invariants ever change.
         const isSelected = selectedWords.includes(word);
         const isFadingOut = fadeOutWords.includes(word);
         if (newWord === word && !isSelected && !isFadingOut) {
