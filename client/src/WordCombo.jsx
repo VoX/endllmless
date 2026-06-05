@@ -4,9 +4,19 @@ import { Spinner } from "./Spinner";
 import "./WordCombo.css";
 
 const wordCombineApi = async (firstWord, secondWord) => {
-    const requestTask = fetch(`/api/wordcombine?wordone=${firstWord}&wordtwo=${secondWord}`);
+    const requestTask = fetch(`/api/wordcombine?wordone=${encodeURIComponent(firstWord)}&wordtwo=${encodeURIComponent(secondWord)}`);
     const response = (await Promise.all([requestTask, new Promise(r => setTimeout(r, 2000))]))[0];
-    return await response.json();
+    // fetch only rejects on network failure, not on HTTP 4xx/5xx, so a server
+    // error returns a valid JSON error body. Throw on it so the caller's catch
+    // runs loadingError() instead of dispatching newWord(undefined, undefined).
+    if (!response.ok) {
+        throw new Error(`wordcombine failed: ${response.status}`);
+    }
+    const wordRes = await response.json();
+    if (!wordRes || typeof wordRes.newWord !== "string" || !wordRes.newWord) {
+        throw new Error("wordcombine returned no word");
+    }
+    return wordRes;
 };
 
 export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError }) => {

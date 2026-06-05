@@ -4,7 +4,7 @@
 
 ## Start Development
 
-- `export OPENAI_API_KEY=<key>`
+- `export OPENROUTER_API_KEY=<key>`
 - `npm i && npm run dev`
 
 ## Deployment (Docker)
@@ -44,14 +44,14 @@ docker build -t endllmless .
 
 ### 5. Run the Container
 
-Replace `<your_openai_key>` with your actual API key.
+Replace `<your_openrouter_key>` with your actual API key.
 
 ```bash
 docker run -d \
   --restart on-failure \
   --add-host=host.docker.internal:host-gateway \
   -p 80:80 -p 443:443 \
-  -e OPENAI_API_KEY=<your_openai_key> \
+  -e OPENROUTER_API_KEY=<your_openrouter_key> \
   -e JELLY_PATH=<your_secret_path_prefix> \
   --name endless \
   endllmless
@@ -89,7 +89,7 @@ To update the running application with the latest code:
      --restart on-failure \
      --add-host=host.docker.internal:host-gateway \
      -p 80:80 -p 443:443 \
-     -e OPENAI_API_KEY=<your_openai_key> \
+     -e OPENROUTER_API_KEY=<your_openrouter_key> \
      -e JELLY_PATH=<your_secret_path_prefix> \
      --name endless \
      endllmless

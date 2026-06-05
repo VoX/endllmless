@@ -2,7 +2,12 @@ import express from 'express';
 import OpenAI from "openai";
 
 const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
+    apiKey: process.env.OPENROUTER_API_KEY,
+    baseURL: 'https://openrouter.ai/api/v1',
+    defaultHeaders: {
+        'HTTP-Referer': 'https://endless.claw.bitvox.me',
+        'X-Title': 'endllmless'
+    }
 });
 var router = express.Router();
 
@@ -16,7 +21,7 @@ router.get('/', async (req, res, next) => {
     if (titleCache.length === 0 || (now - lastFetchTime > CACHE_DURATION)) {
         try {
             const completion = await openai.chat.completions.create({
-                model: "gpt-5.1",
+                model: "openai/gpt-4o-mini",
                 messages: [
                     {
                         "role": "system",
@@ -44,9 +49,19 @@ router.get('/', async (req, res, next) => {
                     }
                 }
             });
-            const data = JSON.parse(completion.choices[0].message.content);
-            console.log("generated titles:", data.titles);
-            titleCache = data.titles.map(t => t.replace(/^CRAFT\s+/i, '').replace(/\s+THINGS$/i, ''));
+            const content = completion?.choices?.[0]?.message?.content;
+            if (typeof content !== 'string') throw new Error('no completion content');
+            const data = JSON.parse(content);
+            console.log("generated titles:", data?.titles);
+            const titles = (data?.titles || [])
+                .map(t => String(t).replace(/^CRAFT\s+/i, '').replace(/\s+THINGS$/i, '').trim())
+                .filter(t => t.length);
+            // Treat an empty/invalid result as a failure so we fall into the catch
+            // and return the ENDLESS fallback instead of poisoning the cache with []
+            // (which would make currentIndex % 0 = NaN AND re-hit the paid API on
+            // every poll, since titleCache.length === 0 stays true forever).
+            if (!titles.length) throw new Error('no titles');
+            titleCache = titles;
             currentIndex = 0;
             lastFetchTime = Date.now();
         } catch (error) {
@@ -55,8 +70,7 @@ router.get('/', async (req, res, next) => {
         }
     }
 
-    const title = titleCache[currentIndex % titleCache.length];
-    currentIndex++;
+    const title = titleCache.length ? titleCache[currentIndex++ % titleCache.length] : "ENDLESS";
     res.json({ title });
 });
 

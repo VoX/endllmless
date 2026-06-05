@@ -4,7 +4,12 @@ import OpenAI from "openai";
 const wordCache = new Map();
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENROUTER_API_KEY,
+  baseURL: 'https://openrouter.ai/api/v1',
+  defaultHeaders: {
+    'HTTP-Referer': 'https://endless.claw.bitvox.me',
+    'X-Title': 'endllmless'
+  }
 });
 var router = express.Router();
 
@@ -17,17 +22,27 @@ router.get('/', async (req, res, next) => {
     return;
   }
 
+  // Reject non-string (e.g. ?wordone=a&wordone=b yields an array) and overlong
+  // input. The endpoint is public and unauthenticated; this bounds prompt/token
+  // cost and cache-key abuse without affecting normal play (real words are short).
+  if (typeof wordOne !== 'string' || typeof wordTwo !== 'string' ||
+      wordOne.length > 40 || wordTwo.length > 40) {
+    return res.status(400).json({ error: 'invalid input' });
+  }
+
   if (wordOne > wordTwo) {
     [wordOne, wordTwo] = [wordTwo, wordOne];
   }
 
-  if (wordCache.has(`${wordOne}+${wordTwo}`)) {
-    const cachedResponse = wordCache.get(`${wordOne}+${wordTwo}`);
-    return res.json(cachedResponse);
+  const cacheKey = `${wordOne}+${wordTwo}`;
+  if (wordCache.has(cacheKey)) {
+    return res.json(wordCache.get(cacheKey));
   }
 
-  const completion = await openai.chat.completions.create({
-    model: "gpt-5.1",
+  let completion;
+  try {
+    completion = await openai.chat.completions.create({
+    model: "openai/gpt-4o-mini",
     messages: [
       {
         "role": "system",
@@ -76,11 +91,31 @@ router.get('/', async (req, res, next) => {
         }
       }
     }
-  });
+    });
+  } catch (error) {
+    console.error("Error combining words:", error);
+    return res.status(502).json({ error: 'combination_failed' });
+  }
 
-  const response = JSON.parse(completion.choices[0].message.content);
+  // Validate shape before parsing/caching: on OpenRouter, strict json_schema is
+  // provider/model-dependent, and refusals/content-filters can yield null content
+  // or empty choices. Don't poison the cache with a bad entry.
+  let response;
+  try {
+    const content = completion?.choices?.[0]?.message?.content;
+    if (typeof content !== 'string') throw new Error('no completion content');
+    response = JSON.parse(content);
+    if (typeof response?.newWord !== 'string' || !response.newWord) {
+      throw new Error('missing newWord');
+    }
+  } catch (error) {
+    console.error("Bad completion from model:", error);
+    return res.status(502).json({ error: 'combination_failed' });
+  }
 
-  wordCache.set(`${wordOne}+${wordTwo}`, response);
+  // Bound memory under sustained novel/abusive input (Map has no native eviction).
+  if (wordCache.size >= 10000) wordCache.clear();
+  wordCache.set(cacheKey, response);
   res.json(response);
 });
 

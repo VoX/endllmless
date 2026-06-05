@@ -1,7 +1,7 @@
 # Endllmless AI Coding Instructions
 
 ## Project Overview
-Endllmless is a monorepo web application that replicates "Infinite Craft" mechanics. It consists of a Preact frontend and a Node.js/Express backend that uses OpenAI to combine words and generate emojis.
+Endllmless is a monorepo web application that replicates "Infinite Craft" mechanics. It consists of a Preact frontend and a Node.js/Express backend that uses OpenRouter (OpenAI SDK pointed at openrouter.ai) to combine words and generate emojis.
 
 ## Architecture & Structure
 - **Monorepo**:
@@ -15,7 +15,7 @@ Endllmless is a monorepo web application that replicates "Infinite Craft" mechan
 - **Backend (Server)**:
   - **Framework**: Express.js.
   - **Core Logic**: 
-    - `routes/wordCombine.js`: Handles word combination using OpenAI `gpt-5.1` with Structured Outputs.
+    - `routes/wordCombine.js`: Handles word combination using OpenRouter model `openai/gpt-4o-mini` with Structured Outputs.
     - `routes/titleGenerator.js`: Generates abstract titles for the game header.
   - **Caching**: In-memory `Map` (`wordCache`) stores combined results to reduce API calls.
 - **Deployment**:
@@ -31,12 +31,12 @@ Endllmless is a monorepo web application that replicates "Infinite Craft" mechan
 ## Critical Workflows
 - **Development**:
   - Run `npm run dev` from the **root** directory. This uses `concurrently` to start both client (`vite`) and server (`node ./bin/www`).
-  - Ensure `OPENAI_API_KEY` is set in the server environment.
+  - Ensure `OPENROUTER_API_KEY` is set in the server environment.
 - **Build**:
   - **Local**: `npm run build` (root) triggers `npm run build:client`. Output: `client/dist`.
   - **Docker**: `docker build -t endllmless .` builds the full production image.
 - **Run (Docker)**:
-  - Requires `OPENAI_API_KEY` and `JELLY_PATH` env vars.
+  - Requires `OPENROUTER_API_KEY` and `JELLY_PATH` env vars.
   - Requires `--add-host=host.docker.internal:host-gateway` for host networking.
 
 ## Coding Conventions
@@ -55,11 +55,11 @@ Endllmless is a monorepo web application that replicates "Infinite Craft" mechan
 
 ## Specific Patterns
 - **Word Combination**:
-  - Logic: `wordOne` + `wordTwo` -> OpenAI (Structured Output) -> `{ newWord, newEmoji }`.
+  - Logic: `wordOne` + `wordTwo` -> OpenRouter (Structured Output) -> `{ newWord, newEmoji }`.
   - **Ordering**: Words are sorted alphabetically before caching/processing (`wordOne > wordTwo` swap) to ensure "Fire + Water" is the same as "Water + Fire".
 - **Title Generation**:
   - Route: `/api/title`
-  - Logic: Generates 50 titles at once using OpenAI.
+  - Logic: Generates 50 titles at once using OpenRouter.
   - Caching: Caches the list for 1 hour. Serves one title from the list per request (round-robin).
 - **Emoji**: The app relies on emojis as the primary visual representation of words.
 
@@ -69,5 +69,5 @@ Endllmless is a monorepo web application that replicates "Infinite Craft" mechan
   2. Create/Update UI component in `client/src/`.
   3. If backend logic is needed, add route in `server/routes/`.
 - **Debugging**:
-  - Check `server` console for OpenAI errors or cache hits.
+  - Check `server` console for OpenRouter errors or cache hits.
   - Check `client` console for Reducer logs (`console.log("Game state updated:", ...)` is built-in).
