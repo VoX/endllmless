@@ -15,6 +15,43 @@ var router = express.Router();
 
 const MAX_WORD_LEN = 40;
 
+// Shown instead of a bad icon so a flawed emoji never produces a blank/garbled
+// tile (the word is still good — see validateEmoji). The doc suggests a default
+// such as a question-mark emoji.
+const FALLBACK_EMOJI = '❓'; // ❓
+
+// Count user-perceived characters (graphemes). A single emoji can be several
+// code points (ZWJ sequences like 👨‍👩‍👧, flags, skin-tone/variation modifiers),
+// so a naive .length or even spread-then-count over-counts them. Intl.Segmenter
+// with granularity 'grapheme' is the correct unit; fall back to a code-point
+// count (Array.from) on the rare runtime without it.
+const segmenter =
+  typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function'
+    ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+    : null;
+function graphemeCount(str) {
+  if (segmenter) {
+    let n = 0;
+    for (const _ of segmenter.segment(str)) n++;
+    return n;
+  }
+  return Array.from(str).length;
+}
+
+// Validate the model's emoji and return a safe value to cache/serve. The schema
+// asks for exactly one emoji, but on OpenRouter the model still returns empty,
+// whitespace-only, or multi-glyph values (e.g. "🚢🔥"). We never 502 on a bad
+// emoji alone — the newWord is the valuable field — so on any failure we
+// substitute FALLBACK_EMOJI rather than caching a blank/garbled tile. A valid
+// single-grapheme emoji round-trips verbatim.
+function validateEmoji(raw) {
+  if (typeof raw !== 'string') return FALLBACK_EMOJI;
+  const trimmed = raw.trim();
+  if (!trimmed) return FALLBACK_EMOJI; // empty or whitespace-only
+  if (graphemeCount(trimmed) !== 1) return FALLBACK_EMOJI; // multi-glyph
+  return trimmed;
+}
+
 // Normalize a raw query word for safe use in the prompt and cache key. Strips
 // control chars (C0 \u0000-\u001F, DEL \u007F, C1 \u0080-\u009F), collapses
 // any internal whitespace run to a single space, then trims. Returns null for
@@ -82,6 +119,7 @@ router.get('/', async (req, res, next) => {
   try {
     completion = await openai.chat.completions.create({
     model: "google/gemini-2.5-flash-lite",
+    temperature: 0,
     messages: [
       {
         "role": "system",
@@ -91,6 +129,7 @@ router.get('/', async (req, res, next) => {
 - Do not simply combine the words unless it is a commonly used word.
 - Prefer very commonplace and physical nouns.
 - Choose the most commonsense interpretation.
+- Respond with a single common noun in Title Case. If it is two words, separate them with a single space (e.g. "Acid Rain", never "AcidRain"). Use at most two words.
 - Examples:
   - "Fire" + "Ice" = "Water"
   - "Water" + "Fire" = "Steam"
@@ -151,6 +190,10 @@ router.get('/', async (req, res, next) => {
     if (typeof response?.newWord !== 'string' || !response.newWord) {
       throw new Error('missing newWord');
     }
+    // Validate the emoji too, but never 502 on it alone: a bad emoji is repaired
+    // to FALLBACK_EMOJI so we cache/serve a good word with a safe icon instead of
+    // a blank or double-glyph tile. The 502 path stays reserved for newWord.
+    response.newEmoji = validateEmoji(response.newEmoji);
   } catch (error) {
     // This path catches validation/JSON.parse of an otherwise-successful
     // completion (a plain Error, no SDK response headers), but log just the

@@ -22,6 +22,7 @@ router.get('/', async (req, res, next) => {
         try {
             const completion = await openai.chat.completions.create({
                 model: "google/gemini-2.5-flash-lite",
+                temperature: 0,
                 messages: [
                     {
                         "role": "system",

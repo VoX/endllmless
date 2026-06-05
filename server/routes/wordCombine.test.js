@@ -164,6 +164,68 @@ describe('wordCombine route: cache-key normalization', () => {
   });
 });
 
+describe('wordCombine route: deterministic generation (temperature)', () => {
+  it('passes temperature: 0 on the chat.completions.create call', async () => {
+    // Determinism fix from the playtest: without temperature: 0 the same pair
+    // drifts across cache wipes/restarts (Sun+Water -> Ocean/Rainbow/Dew).
+    const res = await get('wordone=fire&wordtwo=water');
+    expect(res.status).toBe(200);
+    expect(createMock).toHaveBeenCalledTimes(1);
+    expect(createMock.mock.calls[0][0].temperature).toBe(0);
+  });
+});
+
+describe('wordCombine route: system prompt format pin', () => {
+  it('instructs the model to use Title Case with single-space two-word output', async () => {
+    // Pins the format rule that collapses the Acid Rain / AcidRain dupe forks.
+    const res = await get('wordone=acid&wordtwo=rain');
+    expect(res.status).toBe(200);
+
+    const systemMsg = createMock.mock.calls[0][0].messages[0].content;
+    expect(systemMsg).toContain('Title Case');
+    expect(systemMsg).toContain('single space');
+  });
+});
+
+describe('wordCombine route: emoji validation', () => {
+  it('substitutes a single fallback glyph for an empty emoji (still 200, cached)', async () => {
+    // A blank/whitespace emoji must NOT 502 (the word is good) and must NOT be
+    // cached as-is — it becomes the fallback so the tile is never blank.
+    createMock.mockResolvedValueOnce(okCompletion('Swamp', '   '));
+
+    const res = await get('wordone=peat&wordtwo=water');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.newWord).toBe('Swamp');
+    expect(body.newEmoji).toBe('❓');
+
+    // The repaired (not the bad) value is what's cached: a repeat is a hit and
+    // replays the fallback glyph, with no second model call.
+    const repeat = await (await get('wordone=Water&wordtwo=Peat')).json();
+    expect(repeat).toEqual(body);
+    expect(createMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('substitutes a single fallback glyph for a multi-glyph emoji (still 200)', async () => {
+    // Two-emoji values like "🚢🔥" violate "exactly one emoji" -> fallback.
+    createMock.mockResolvedValueOnce(okCompletion('Shipwreck', '🚢🔥'));
+
+    const res = await get('wordone=fire&wordtwo=oceanliner');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ newWord: 'Shipwreck', newEmoji: '❓' });
+  });
+
+  it('passes a valid multi-codepoint single-grapheme emoji through verbatim', async () => {
+    // 🌧️ is a ZWJ/variation-selector emoji (2 code points, 1 grapheme): a
+    // naive code-unit/code-point length would wrongly reject it. It must survive.
+    createMock.mockResolvedValueOnce(okCompletion('Rain', '🌧️'));
+
+    const res = await get('wordone=steam&wordtwo=cloud');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ newWord: 'Rain', newEmoji: '🌧️' });
+  });
+});
+
 describe('wordCombine route: success response body', () => {
   it('round-trips the model payload (newWord + newEmoji) to the client verbatim', async () => {
     createMock.mockResolvedValueOnce(okCompletion('Steam', '💨'));
