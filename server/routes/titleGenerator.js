@@ -21,7 +21,7 @@ router.get('/', async (req, res, next) => {
     if (titleCache.length === 0 || (now - lastFetchTime > CACHE_DURATION)) {
         try {
             const completion = await openai.chat.completions.create({
-                model: "openai/gpt-4o-mini",
+                model: "google/gemini-2.5-flash-lite",
                 messages: [
                     {
                         "role": "system",

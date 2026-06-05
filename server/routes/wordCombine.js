@@ -81,7 +81,7 @@ router.get('/', async (req, res, next) => {
   let completion;
   try {
     completion = await openai.chat.completions.create({
-    model: "openai/gpt-4o-mini",
+    model: "google/gemini-2.5-flash-lite",
     messages: [
       {
         "role": "system",
@@ -122,7 +122,7 @@ router.get('/', async (req, res, next) => {
             },
             newEmoji: {
               type: "string",
-              description: "A single emoji representing the new word."
+              description: "Exactly ONE emoji character representing the new word — never more than one."
             }
           },
           required: ["newWord", "newEmoji"],
