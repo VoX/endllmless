@@ -1,5 +1,5 @@
 import "./App.css";
-import { useEffect, useReducer, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
 import { GameButtonsContainer } from "./GameButton";
 import { TitleHeader } from "./TitleHeader";
 import { gameReducer, initialGameState, initializeState } from "./gameReducer";
@@ -38,7 +38,11 @@ function getInitialSortMode() {
 // slightly bigger golden one-shot — a lightweight authored hook against the
 // mid-game "I made 400 things, so what?" plateau (see README theory).
 const MILESTONES = new Set([10, 25, 50, 100, 250, 500]);
-const isMilestone = (n) => MILESTONES.has(n) || (n > 0 && n % 25 === 0);
+// Exported so the threshold contract (set members OR any multiple of 25, with an
+// n>0 guard so 0 never fires) can be unit-tested in the node env without a DOM —
+// a regression guard against a future threshold tweak silently changing which
+// discoveries celebrate.
+export const isMilestone = (n) => MILESTONES.has(n) || (n > 0 && n % 25 === 0);
 
 function App() {
   const [gameState, dispatch] = useReducer(gameReducer, initialGameState, initializeState);
@@ -90,6 +94,19 @@ function App() {
   }
   prevCountRef.current = discoveredCount;
 
+  // Whether THIS render's bump is the milestone one, computed synchronously from
+  // the same per-render refs the keyed span is built from (advanced just above).
+  // This is the half that fixes the one-frame mis-render on the discovery AFTER a
+  // milestone (e.g. 50 -> 51): the span remounts at the new bumpKey, so this is
+  // false immediately, gating off the gold class + "NN!" marker regardless of the
+  // milestoneActive flag still lingering from the 50-bump. (milestoneActive — set
+  // in a layout effect below — is the other half: it commits before paint so the
+  // milestone's OWN render shows gold from the first frame, and it self-clears
+  // after the animation so later non-growth re-renders, e.g. typing in the filter
+  // at count 50, don't keep the gold pinned.)
+  const isMilestoneBump =
+    bumpKeyRef.current > 0 && milestoneKeyRef.current === bumpKeyRef.current;
+
   // Visible state of the milestone flourish (gold count + "NN!" marker). Unlike
   // the .bump scale — a played-out animation that's simply invisible once it
   // stops, so a lingering .bump class is harmless — the milestone adds STATIC
@@ -110,8 +127,16 @@ function App() {
   // bumpKeyRef.current (advances on every discovery) rather than the ref value
   // directly so a non-milestone discovery between two milestones still re-runs
   // and correctly resolves to "not a milestone bump" -> hidden.
+  //
+  // useLayoutEffect (not useEffect): it commits the milestoneActive flip BEFORE
+  // the browser paints, so on the milestone's own render the gold class +
+  // marker + the larger keyframe are in place from the first painted frame
+  // instead of flashing the normal bump for a frame and then restarting the
+  // animation into the gold one. Together with the synchronous isMilestoneBump
+  // gate above, both the milestone render and the one right after it paint
+  // correctly on the first frame.
   const currentBumpKey = bumpKeyRef.current;
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (currentBumpKey > 0 && milestoneKeyRef.current === currentBumpKey) {
       setMilestoneActive(true);
       const id = setTimeout(() => setMilestoneActive(false), 600);
@@ -121,6 +146,12 @@ function App() {
     setMilestoneActive(false);
     return undefined;
   }, [currentBumpKey]);
+
+  // Final visible state of the flourish: this render's bump must BE the milestone
+  // one (synchronous, kills the post-milestone flash) AND the timed window must
+  // still be open (self-clearing, kills the stuck-gold-on-later-re-render). Gates
+  // both the gold class and the "NN!" marker off one value so they never diverge.
+  const showMilestone = isMilestoneBump && milestoneActive;
 
   // Show the onboarding hint until the player has discovered more than the 5
   // default words, or until they dismiss it manually.
@@ -166,7 +197,25 @@ function App() {
       <div className="container" style={{ margin: "auto" }}>
         <div className="topbar">
           <TitleHeader />
-          <WordCombo wordState={gameState.wordState} words={gameState.words} loadingWord={loadingWord} newWord={newWord} loadingError={loadingError} />
+          {/* milestoneReached: a first-find that crossed a milestone count, so the
+              combo-result live region can fold a milestone cue into the single
+              sentence it already announces (the visual gold flourish is
+              aria-hidden, so without this AT users get no signal that a round
+              number was crossed). Derived from the current state + count, not the
+              transient showMilestone flag, so it stays stable for the whole
+              RESULT_HOLD window and the live region announces it exactly once. */}
+          <WordCombo
+            wordState={gameState.wordState}
+            words={gameState.words}
+            loadingWord={loadingWord}
+            newWord={newWord}
+            loadingError={loadingError}
+            milestoneReached={
+              !!gameState.wordState.new &&
+              gameState.wordState.isFirstFound &&
+              isMilestone(discoveredCount)
+            }
+          />
           {/* Quiet running total of discoveries. Visual-only (no live region):
               WordCombo's combo-result region already announces the discovery
               sentence in the same render commit, so a polite live region here
@@ -179,7 +228,7 @@ function App() {
             key={bumpKeyRef.current}
             className={`discovery-count${
               bumpKeyRef.current > 0
-                ? milestoneActive
+                ? showMilestone
                   ? " bump milestone"
                   : " bump"
                 : ""
@@ -187,14 +236,15 @@ function App() {
           >
             {discoveredCount} discovered
             {/* One-beat inline marker on the milestone span only. Driven by the
-                same self-clearing milestoneActive flag as the gold class, so it
-                shows for the ~0.5s flourish on the milestone discovery and then
-                clears — it does NOT linger through later filter/sort re-renders.
+                same showMilestone value as the gold class, so it shows for the
+                ~0.5s flourish on the milestone discovery and then clears — it does
+                NOT linger through later filter/sort re-renders, and it does NOT
+                flash on the discovery right after a milestone.
                 aria-hidden: the visual "50!" is decorative emphasis on the
                 already-present "50 discovered" count, so it shouldn't double up
                 for a screen reader (and the count line itself is visual-only —
                 WordCombo's status region owns the announcement). */}
-            {milestoneActive ? (
+            {showMilestone ? (
               <span className="discovery-milestone-marker" aria-hidden="true">
                 {" "}
                 {discoveredCount}!

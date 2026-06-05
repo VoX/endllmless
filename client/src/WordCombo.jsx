@@ -42,7 +42,7 @@ const wordCombineApi = async (firstWord, secondWord) => {
 // "try again".
 const errorKind = (error) => (error && error.status === 429 ? 'rate_limited' : 'generic');
 
-export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError }) => {
+export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError, milestoneReached = false }) => {
     useEffect(() => {
         // loading_error clears first/second, so the first+second check below is
         // already false after a failure. The extra !wordState.error guard is
@@ -159,8 +159,12 @@ export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError
                     <span className="visually-hidden">
                         {/* Fold the new-vs-rediscovered distinction (shown visually
                             by the aria-hidden badge) into the announced sentence so
-                            screen-reader users get the same signal. */}
-                        {`${wordState.first} plus ${wordState.second} equals ${wordState.new}${wordState.isFirstFound ? ", a new discovery" : ", already discovered"}`}
+                            screen-reader users get the same signal. On a milestone
+                            first-find, also fold in the milestone cue (the visual
+                            gold flourish + "NN!" marker are aria-hidden), so AT
+                            users get the same "you crossed a round number" beat —
+                            in the SAME one-shot sentence, no competing live region. */}
+                        {`${wordState.first} plus ${wordState.second} equals ${wordState.new}${wordState.isFirstFound ? ", a new discovery" : ", already discovered"}${milestoneReached ? ", milestone reached" : ""}`}
                     </span>
                 ) : wordState.first && wordState.second && wordState.loading ? (
                     <span className="visually-hidden">

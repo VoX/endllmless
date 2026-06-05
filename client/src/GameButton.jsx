@@ -25,7 +25,9 @@ const TILE_ENTER_MS = 220;
 // Case-insensitive substring match for the grid filter. An empty/whitespace-only
 // query matches everything (no filtering). Shared by the render-time .filter and
 // the new-tile scroll guard so "is this word currently shown?" is decided one way.
-const matchesQuery = (word, query) => {
+// Exported (like migrateWords) so the empty-query/trim/case-insensitive contract
+// the container depends on can be unit-tested in the node env without a DOM.
+export const matchesQuery = (word, query) => {
   const q = (query || "").trim().toLowerCase();
   if (!q) return true;
   return word.toLowerCase().includes(q);
@@ -35,8 +37,9 @@ const matchesQuery = (word, query) => {
 // "newest" = most recent discovery on top (insertion order reversed); "alpha" =
 // case-insensitive A-Z. `words` stays the source of truth — this only reorders
 // the keys for rendering, so all word-keyed state (is-new, base-tile, selected)
-// is unaffected.
-const orderWords = (keys, sortMode) => {
+// is unaffected. Exported (like migrateWords) so the sort branches can be
+// unit-tested in the node env without a DOM.
+export const orderWords = (keys, sortMode) => {
   if (sortMode === "alpha") {
     // Copy before sorting: never mutate the caller's array (Object.keys result
     // is fresh here, but keep the function pure for any future reuse).
@@ -142,15 +145,16 @@ export const GameButtonsContainer = ({ onClickWord, words, queueEmpty, filter = 
       // populated. Smooth scroll when motion is allowed; instant under reduce.
       setNewWord(tadaTarget);
       const tileEl = tileRefs.current.get(tadaTarget);
-      // Don't chase a tile the player can't currently see-as-the-reward:
-      //  - "newest" sort already puts the new tile at the grid top, right under
-      //    the topbar, so the append-at-end scroll assumption no longer holds —
-      //    skip it (the tile is already where the eye is).
-      //  - a tile excluded by the active filter isn't rendered at all, so there's
-      //    nothing to scroll to (its ref is also gone); guard explicitly so the
-      //    reward chase can't target a filtered-out word.
+      // Only skip the scroll for a tile that genuinely isn't on screen as the
+      // reward: one excluded by the active filter isn't rendered at all, so
+      // there's nothing to scroll to (its ref is also gone). We do NOT skip on
+      // sortMode anymore: in "newest" the new tile is at the grid TOP, but the
+      // player is often scrolled to the BOTTOM (combining with a base element,
+      // which sits at the bottom in newest), so the entrance pop + new ring would
+      // play above the fold, unseen. The visibility measurement below decides
+      // whether a scroll is actually needed in either sort.
       const matchesFilter = matchesQuery(tadaTarget, filterRef.current);
-      const skipScroll = sortModeRef.current === "newest" || !matchesFilter;
+      const skipScroll = !matchesFilter;
       // Only scroll on the LAST tile of a batch (queue drained). During a rapid
       // multi-combine each resolved word appends lower in the grid and would be
       // off-screen, so without this gate the viewport chases the grid bottom
@@ -161,21 +165,37 @@ export const GameButtonsContainer = ({ onClickWord, words, queueEmpty, filter = 
       if (!skipScroll && queueEmptyRef.current && tileEl && typeof tileEl.scrollIntoView === "function") {
         // Treat the region behind the sticky, z-indexed topbar (App.css .topbar)
         // as NOT visible: on narrow screens it stacks several rows (wrapped
-        // title + combo + discovery line + optional error), so a tile whose top
-        // sits just below 0 can still be occluded by the bar. Measure the live
-        // bar height instead of assuming a fixed offset, and only skip the
-        // scroll when the tile is fully clear of it. (scroll-margin-top in the
-        // CSS keeps the tile off the bar when we do scroll.)
+        // title + combo + discovery line + grid controls + optional error), so a
+        // tile whose top sits just below 0 can still be occluded by the bar.
+        // Measure the live bar height instead of assuming a fixed offset, and
+        // only skip the scroll when the tile is fully clear of it.
         const topbarEl =
           typeof document !== "undefined" ? document.querySelector(".topbar") : null;
         const topbarBottom = topbarEl ? topbarEl.getBoundingClientRect().bottom : 0;
         const r = tileEl.getBoundingClientRect();
         const visible = r.top >= topbarBottom && r.bottom <= window.innerHeight;
         if (!visible) {
+          // scrollIntoView({block:"nearest"}) honors only the STATIC
+          // scroll-margin-top (var(--space-4), 24px) from GameButton.css, but the
+          // topbar now stacks up to 4-5 rows and on a narrow viewport with a
+          // wrapped title is far taller than 24px. So when the tile aligns to the
+          // TOP (it's above the fold — the common "newest" case where the player
+          // is scrolled down), a 24px clearance leaves it partly behind the bar.
+          // Set the clearance to the measured bar height (+ a small gap) right
+          // before scrolling so the gate and the landing position agree; the
+          // static CSS value stays as the no-measurement fallback. Cleared after
+          // the scroll so it doesn't pin a stale margin on later interactions.
+          const clearance = topbarBottom > 0 ? topbarBottom + 8 : null;
+          if (clearance != null) tileEl.style.scrollMarginTop = `${clearance}px`;
           tileEl.scrollIntoView({
             behavior: prefersReducedMotion() ? "auto" : "smooth",
             block: "nearest",
           });
+          if (clearance != null) {
+            // Restore the stylesheet-driven margin after the scroll is scheduled
+            // so it reverts to the static fallback for any future scrollIntoView.
+            tileEl.style.scrollMarginTop = "";
+          }
         }
       }
     }
@@ -231,6 +251,11 @@ export const GameButtonsContainer = ({ onClickWord, words, queueEmpty, filter = 
   // (Only reachable when there's a non-empty query — an empty query matches all,
   // and the grid always has the 5 base words.)
   //
+  // Echo the query ("no matches for ...") so a user who mistyped sees WHAT was
+  // searched without hopping back to the (possibly tabbed-away) input — improves
+  // recoverability of the dead end. Uses the trimmed query (matchesQuery's empty
+  // contract guarantees we only get here with a non-empty trimmed query).
+  //
   // No role="list" here: a list with zero listitems plus the "Select two to
   // combine them" label would be malformed + actively misleading (nothing is
   // selectable). Instead the message is a polite role="status" live region, so a
@@ -240,7 +265,7 @@ export const GameButtonsContainer = ({ onClickWord, words, queueEmpty, filter = 
     return (
       <div className="game-buttons-container">
         <p className="grid-empty" role="status">
-          no matches
+          {`no matches for "${filter.trim()}"`}
         </p>
       </div>
     );
