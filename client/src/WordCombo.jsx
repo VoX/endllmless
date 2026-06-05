@@ -42,7 +42,7 @@ const wordCombineApi = async (firstWord, secondWord) => {
 // "try again".
 const errorKind = (error) => (error && error.status === 429 ? 'rate_limited' : 'generic');
 
-export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError }) => {
+export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError, milestoneReached = false }) => {
     useEffect(() => {
         // loading_error clears first/second, so the first+second check below is
         // already false after a failure. The extra !wordState.error guard is
@@ -67,13 +67,37 @@ export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError
         localStorage.setItem("words", JSON.stringify(words));
     }, [words]);
 
+    // Resting state: nothing selected, nothing in flight, no result, no error.
+    // Fills the otherwise-empty reserved band (min-height:50px) so the row reads
+    // as "combining happens here" instead of a layout gap, and gives an in-place
+    // affordance once the grid-focused onboarding hint is dismissed. Visual-only
+    // (aria-hidden): the role=status region below already owns announcements, so
+    // surfacing this to a screen reader would just double-speak.
+    const resting =
+        !wordState.first &&
+        !wordState.second &&
+        !wordState.new &&
+        !wordState.loading &&
+        !wordState.error;
+
     return (
         <div className="word-combo">
+            {resting ? (
+                <span className="combo-placeholder" aria-hidden="true">
+                    <span className="combo-op">?</span>
+                    <span className="combo-op">+</span>
+                    <span className="combo-op">?</span>
+                    <span className="combo-op">=</span>
+                    <span className="combo-op">?</span>
+                </span>
+            ) : (
+                <></>
+            )}
             {wordState.first ? (
                 <>
                     <SelectedWord
                         word={wordState.first}
-                        emoji={words[wordState.first]}
+                        emoji={words[wordState.first]?.emoji}
                         isFirstFound={false}
                     />
                     <span className="combo-op" aria-hidden="true">+</span>
@@ -84,7 +108,7 @@ export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError
             {wordState.second ? (
                 <SelectedWord
                     word={wordState.second}
-                    emoji={words[wordState.second]}
+                    emoji={words[wordState.second]?.emoji}
                     isFirstFound={false}
                 />
             ) : (
@@ -104,7 +128,7 @@ export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError
                         <>
                             <SelectedWord
                                 word={wordState.new}
-                                emoji={words[wordState.new]}
+                                emoji={words[wordState.new]?.emoji}
                                 isFirstFound={wordState.isFirstFound}
                             />
                             <span
@@ -112,6 +136,18 @@ export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError
                             >
                                 {wordState.isFirstFound ? "New!" : "already discovered"}
                             </span>
+                            {/* Lineage on a fresh find only: the "X + Y" recipe the
+                                player just grew. aria-hidden so it doesn't double the
+                                self-contained combo sentence the live region already
+                                announces below; the badge itself is already hidden,
+                                but the source pair lives on words[new].from. */}
+                            {wordState.isFirstFound && words[wordState.new]?.from ? (
+                                <span className="combo-lineage">
+                                    {`${words[wordState.new].from[0]} + ${words[wordState.new].from[1]}`}
+                                </span>
+                            ) : (
+                                ""
+                            )}
                         </>
                     ) : wordState.loading ? (
                         <Spinner />
@@ -123,8 +159,12 @@ export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError
                     <span className="visually-hidden">
                         {/* Fold the new-vs-rediscovered distinction (shown visually
                             by the aria-hidden badge) into the announced sentence so
-                            screen-reader users get the same signal. */}
-                        {`${wordState.first} plus ${wordState.second} equals ${wordState.new}${wordState.isFirstFound ? ", a new discovery" : ", already discovered"}`}
+                            screen-reader users get the same signal. On a milestone
+                            first-find, also fold in the milestone cue (the visual
+                            gold flourish + "NN!" marker are aria-hidden), so AT
+                            users get the same "you crossed a round number" beat —
+                            in the SAME one-shot sentence, no competing live region. */}
+                        {`${wordState.first} plus ${wordState.second} equals ${wordState.new}${wordState.isFirstFound ? ", a new discovery" : ", already discovered"}${milestoneReached ? ", milestone reached" : ""}`}
                     </span>
                 ) : wordState.first && wordState.second && wordState.loading ? (
                     <span className="visually-hidden">

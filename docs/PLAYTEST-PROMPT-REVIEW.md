@@ -79,6 +79,12 @@ the *inconsistency* is what creates the dupes.
 Optionally normalize server-side as a backstop (trim, collapse internal spaces,
 Title-case) before caching, so any residual drift still collapses to one tile.
 
+> **Status (iter2):** the prompt-side format pin SHIPPED (Title Case + single-space
+> two-word rule, pinned by a test). The optional server-side normalization backstop
+> (trim/collapse/Title-case before caching) is DEFERRED — the prompt rule is a soft
+> constraint the model can still violate, so any residual case/space drift can still
+> fork a tile until that backstop lands.
+
 ### 3. The emoji is the weak, unvalidated field [MEDIUM]
 
 `newEmoji` is generated per-combine and the server validates only `newWord` (it
@@ -101,6 +107,15 @@ at `newEmoji`). Consequences observed:
    *result word*, so once "Shipwreck" has an icon, every path to Shipwreck shows
    the same one. (`temperature: 0` from #1 also reduces this drift.)
 
+> **Status (iter2):** part 1 SHIPPED and was hardened — `validateEmoji` now rejects
+> empty, whitespace, multi-glyph AND non-emoji single graphemes (a stray letter/
+> digit/punct/CJK char) via `\p{Extended_Pictographic}`, falling back to ❓. Part 2
+> (per-word canonical emoji keyed by the result word) is DEFERRED, so two paths to
+> the same word can still show different valid icons; the related "don't permanently
+> cache a fallback / allow a re-roll" tweak rides along with that map and is also
+> deferred. `temperature: 0` on the combine route narrows but does not eliminate the
+> cross-path drift.
+
 ---
 
 ## Minor / cosmetic
@@ -117,6 +132,10 @@ at `newEmoji`). Consequences observed:
   twice), occasionally fewer than the requested 50, and a misspelling ("ETHERIAL"
   for "ETHEREAL"). Purely cosmetic — the route cycles through whatever it gets.
   A server-side dedupe of the titles list would tidy it.
+  > **Status (iter2):** server-side dedupe DEFERRED. Note: the title route is left
+  > at a nonzero temperature ON PURPOSE — it serves a 1h-cached list round-robin and
+  > needs variety, so `temperature: 0` (briefly applied in iter1) was reverted; a
+  > dedupe would still be a nice tidy-up on top of that.
 
 ---
 

@@ -1,9 +1,13 @@
+// Each discovered word is stored as { emoji, from }, where `from` is the source
+// pair [first, second] that first crafted it, or null for the primordial set.
+// Capturing the recipe lets the collection read as a tech-tree the player grew
+// (see README theory pillars #4 "build a mental model" and #6 "it compounds").
 const defaultWords = {
-    earth: "⛰️",
-    fire: "🔥",
-    life: "🌿",
-    water: "💦",
-    wind: "🌬️",
+    earth: { emoji: "⛰️", from: null },
+    fire: { emoji: "🔥", from: null },
+    life: { emoji: "🌿", from: null },
+    water: { emoji: "💦", from: null },
+    wind: { emoji: "🌬️", from: null },
 };
 
 // The five primordial elements. Exported (keys only) so the tile grid can give
@@ -29,15 +33,55 @@ export const initialGameState = {
     confirmReset: false,
 };
 
+// Normalize a persisted words blob to the current { word: { emoji, from } }
+// shape. Two legacy/foreign forms are tolerated so existing saves keep working:
+//   - the OLD per-entry shape { word: "🔥" } (a bare emoji string) is coerced to
+//     { emoji: "🔥", from: null } — the recipe wasn't recorded back then, so it
+//     reads as foundational rather than inventing a source pair;
+//   - a partial/garbled object value (anything that isn't a string and lacks a
+//     string `emoji`) is dropped to a safe { emoji: "", from: null } so a single
+//     bad entry can't blank-render or crash a read site.
+// Returns the migrated map, or null if `stored` isn't a usable plain object so
+// the caller can fall back to the defaults.
+export const migrateWords = (stored) => {
+    if (!stored || typeof stored !== "object" || Array.isArray(stored)) {
+        return null;
+    }
+    const migrated = {};
+    for (const [word, value] of Object.entries(stored)) {
+        if (typeof value === "string") {
+            migrated[word] = { emoji: value, from: null };
+        } else if (value && typeof value === "object") {
+            migrated[word] = {
+                emoji: typeof value.emoji === "string" ? value.emoji : "",
+                // Preserve a well-formed source pair; otherwise treat as base. Both
+                // elements must be strings — `from` is now persisted user data a
+                // future surface (a collection / tech-tree view) may render
+                // directly, so a garbled pair like [null, 5] shouldn't survive as
+                // a "null + 5" lineage caption.
+                from:
+                    Array.isArray(value.from) &&
+                    value.from.length === 2 &&
+                    value.from.every((w) => typeof w === "string")
+                        ? value.from
+                        : null,
+            };
+        } else {
+            migrated[word] = { emoji: "", from: null };
+        }
+    }
+    return migrated;
+};
+
 export const initializeState = (initialValue) => {
     // Guard against corrupted/non-JSON persisted state (browser glitch, another
     // script on the origin, manual tampering, partial write). A throw here would
     // crash reducer init and blank the whole app with no recovery, so fall back
-    // to the defaults and only adopt the stored value when it's a plain object.
+    // to the defaults and only adopt the stored value when it migrates cleanly.
     try {
-        const stored = JSON.parse(localStorage.getItem("words"));
-        if (stored && typeof stored === "object" && !Array.isArray(stored)) {
-            initialValue.words = stored;
+        const migrated = migrateWords(JSON.parse(localStorage.getItem("words")));
+        if (migrated) {
+            initialValue.words = migrated;
         }
     } catch {
         // Keep defaultWords; nothing to adopt.
@@ -101,6 +145,24 @@ function innerGameReducer(state, action) {
             };
         }
         case 'new_word': {
+            // Own-property check, NOT `state.words[action.word] === undefined`:
+            // `words` is a plain object, so a word that collides with an inherited
+            // Object.prototype member ("constructor", "toString", "valueOf",
+            // "hasOwnProperty", …) would read back the inherited FUNCTION instead
+            // of undefined. That would (a) wrongly mark a true first find as a
+            // rediscovery and (b) store the inherited function as the entry, which
+            // then blanks/crashes every downstream `.emoji` read. The server
+            // returns newWord verbatim from the model, and "constructor" is an
+            // ordinary English word it can emit, so this is reachable in prod.
+            const isFirstFound = !Object.prototype.hasOwnProperty.call(state.words, action.word);
+            const existing = isFirstFound ? undefined : state.words[action.word];
+            // First path wins: record the source pair only on first discovery and
+            // never clobber an existing entry's `from` on rediscovery (matches the
+            // canonical-once intent). On rediscovery we keep the stored entry as-is
+            // — same emoji, same lineage — so the map is unchanged for that word.
+            const entry = isFirstFound
+                ? { emoji: action.emoji, from: [state.wordState.first, state.wordState.second] }
+                : existing;
             return {
                 ...state,
                 wordState: {
@@ -113,9 +175,9 @@ function innerGameReducer(state, action) {
                     // that reaches new_word today comes through a cleared error, but
                     // don't depend on that invariant holding elsewhere.
                     error: "",
-                    isFirstFound: !Object.keys(state.words).includes(action.word)
+                    isFirstFound
                 },
-                words: { ...state.words, ...{ [action.word]: action.emoji } },
+                words: { ...state.words, [action.word]: entry },
             };
         }
         case 'loading_error': {

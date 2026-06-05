@@ -23,6 +23,26 @@
   min-width: 1ch;
 }
 
+/* Resting/empty affordance for the combine row: a faint "? + ? = ?" shown only
+   when nothing is selected, in flight, resolved, or errored. Reuses .combo-op
+   for the glyphs so the glyph shapes/weight match the live equation row
+   (rendered smaller + muted via the font-size + muted color below so it reads as
+   a hint, not live content). aria-hidden in the markup, so it stays out of the
+   live region.
+   No opacity knockdown: this is the DEFAULT resting state every user sees on
+   load and it teaches the core combine mechanic, so it's not decoration. At
+   opacity:0.6 the muted text computed to ~2.27:1 on the light bg — below the WCAG
+   1.4.3 floor. --text-muted alone is ~4.57:1 light / ~6.23:1 dark (both pass AA),
+   and the smaller 0.8rem size already makes it recede as a hint. */
+.combo-placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  user-select: none;
+}
+
 /* Small label beside the combine result: "New!" vs "already discovered". */
 .result-badge {
   font-size: 0.6rem;
@@ -45,6 +65,24 @@
   font-weight: 600;
   text-transform: none;
   letter-spacing: 0;
+}
+
+/* Muted "X + Y" recipe line shown under the result badge on a fresh find. Sits
+   on its own line (block) so it reads as a caption beneath the new word rather
+   than trailing the badge. Colored to recede like .result-badge — present but not
+   competing with the discovered word. Sized slightly larger than the one-word
+   .result-badge (0.6rem): unlike that bare "New!" label, this carries real,
+   non-redundant info (the two-word recipe the player just discovered) and is
+   meant to be read, so 0.7rem keeps it legible without pulling focus. The recipe
+   content already reaches AT via the announced "X plus Y equals Z" sentence in
+   the combo-result live region (WordCombo.jsx), so this aria-hidden caption is a
+   visual re-emphasis, not the only path to it. */
+.combo-lineage {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+  white-space: nowrap;
 }
 
 /* Inline failure message for a combine that errored (rate limit / network /

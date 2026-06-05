@@ -22,6 +22,14 @@ router.get('/', async (req, res, next) => {
         try {
             const completion = await openai.chat.completions.create({
                 model: "google/gemini-2.5-flash-lite",
+                // Intentionally NOT temperature: 0 here. Unlike the combine route
+                // (which wants Fire+Water stable across restarts), this route's
+                // whole purpose is VARIED creative titles: it asks for "50 unique,
+                // interesting, slightly abstract words", caches them 1h, and serves
+                // them round-robin. Greedy decoding would return the SAME 50 every
+                // hourly refetch, collapsing the variety the feature exists for, so
+                // we leave temperature nonzero to keep the rotation fresh.
+                temperature: 0.8,
                 messages: [
                     {
                         "role": "system",

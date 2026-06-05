@@ -1,5 +1,5 @@
 import "./App.css";
-import { useEffect, useReducer, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
 import { GameButtonsContainer } from "./GameButton";
 import { TitleHeader } from "./TitleHeader";
 import { gameReducer, initialGameState, initializeState } from "./gameReducer";
@@ -14,9 +14,55 @@ import { ResetButton } from "./ResetButton";
 // spinner floor, then this result hold.
 const RESULT_HOLD_MS = 500;
 
+// Grid sort modes, persisted in localStorage like the theme choice. "newest"
+// shows the most recent discovery on top (Object.keys reversed); "alpha" sorts
+// A-Z. Default is "newest": it INVERTS the prior insertion-order render (which
+// put the 5 base words first and appended crafted words at the bottom) so the
+// word you just made lands at the top, in view, instead of off the bottom of a
+// growing grid. That's why the new-tile scroll-into-view reward is skipped in
+// this mode (GameButton.jsx skipScroll) — the tile is already where the eye is.
+const SORT_KEY = "sortMode";
+const SORT_MODES = ["newest", "alpha"];
+function getInitialSortMode() {
+  try {
+    const saved = localStorage.getItem(SORT_KEY);
+    if (SORT_MODES.includes(saved)) return saved;
+  } catch {
+    // localStorage can throw in private mode; fall through to the default.
+  }
+  return "newest";
+}
+
+// Milestone thresholds for the discovery-counter flourish. Crossing one of these
+// (low round numbers) or any multiple of 25 swaps the normal +1 bump for a
+// slightly bigger golden one-shot — a lightweight authored hook against the
+// mid-game "I made 400 things, so what?" plateau (see README theory).
+const MILESTONES = new Set([10, 25, 50, 100, 250, 500]);
+// Exported so the threshold contract (set members OR any multiple of 25, with an
+// n>0 guard so 0 never fires) can be unit-tested in the node env without a DOM —
+// a regression guard against a future threshold tweak silently changing which
+// discoveries celebrate.
+export const isMilestone = (n) => MILESTONES.has(n) || (n > 0 && n % 25 === 0);
+
 function App() {
   const [gameState, dispatch] = useReducer(gameReducer, initialGameState, initializeState);
   const [hintDismissed, setHintDismissed] = useState(false);
+  // Live substring filter for the grid (see SearchBar below + GameButtonsContainer).
+  // Empty string = no filtering. Client-only; never touches game state.
+  const [filter, setFilter] = useState("");
+  // Grid render order; persisted across reloads like the theme toggle.
+  const [sortMode, setSortMode] = useState(getInitialSortMode);
+
+  // Persist the chosen sort order so it survives a reload (mirrors ThemeToggle's
+  // localStorage write). Failures (private mode, quota) are non-fatal — the
+  // control still works for the session.
+  useEffect(() => {
+    try {
+      localStorage.setItem(SORT_KEY, sortMode);
+    } catch {
+      // Ignore persistence failures.
+    }
+  }, [sortMode]);
 
   // The whole game loop is accumulation (the collection growing IS the progress
   // bar — see README.md), so surface the running total. Derived from game state —
@@ -33,10 +79,79 @@ function App() {
   // is treated as the baseline, not a discovery.
   const prevCountRef = useRef(discoveredCount);
   const bumpKeyRef = useRef(0);
+  // The bumpKey at which a milestone last fired, or -1 if none yet. Recorded in
+  // the growth-only block so it shares the first-paint/reset-shrink suppression.
+  // We use it (below) to (a) detect a brand-new milestone bump and (b) tie the
+  // flourish's lifetime to that specific bump, not to "until the next discovery".
+  // A ref (not state) so reading/advancing it during render can't trigger an
+  // extra render — same rationale as bumpKeyRef.
+  const milestoneKeyRef = useRef(-1);
   if (discoveredCount > prevCountRef.current) {
     bumpKeyRef.current += 1;
+    if (isMilestone(discoveredCount)) {
+      milestoneKeyRef.current = bumpKeyRef.current;
+    }
   }
   prevCountRef.current = discoveredCount;
+
+  // Whether THIS render's bump is the milestone one, computed synchronously from
+  // the same per-render refs the keyed span is built from (advanced just above).
+  // This is the half that fixes the one-frame mis-render on the discovery AFTER a
+  // milestone (e.g. 50 -> 51): the span remounts at the new bumpKey, so this is
+  // false immediately, gating off the gold class + "NN!" marker regardless of the
+  // milestoneActive flag still lingering from the 50-bump. (milestoneActive — set
+  // in a layout effect below — is the other half: it commits before paint so the
+  // milestone's OWN render shows gold from the first frame, and it self-clears
+  // after the animation so later non-growth re-renders, e.g. typing in the filter
+  // at count 50, don't keep the gold pinned.)
+  const isMilestoneBump =
+    bumpKeyRef.current > 0 && milestoneKeyRef.current === bumpKeyRef.current;
+
+  // Visible state of the milestone flourish (gold count + "NN!" marker). Unlike
+  // the .bump scale — a played-out animation that's simply invisible once it
+  // stops, so a lingering .bump class is harmless — the milestone adds STATIC
+  // visuals (a fixed gold color + a text marker). Those must be one-shot, or they
+  // pin to the counter on every later re-render. This track ADDED two non-growth
+  // re-render sources right next to the counter (the grid filter input + the sort
+  // toggle); without a self-clearing flag, typing one character in the filter
+  // after hitting 50 would keep the gold "50!" stuck next to the count until the
+  // player's next discovery. So we drive it off state that a timeout clears,
+  // decoupled from "next growth".
+  const [milestoneActive, setMilestoneActive] = useState(false);
+
+  // Arm/expire the flourish from the milestone bump. milestoneKeyRef advances
+  // only when a NEW milestone bump fires, so this effect runs once per milestone:
+  // it shows the flourish, then hides it after the ~0.5s animation (600ms) so the
+  // static gold + marker don't outlive the moment. Cleanup clears the timer if
+  // another milestone fires first or the component unmounts. Keyed on
+  // bumpKeyRef.current (advances on every discovery) rather than the ref value
+  // directly so a non-milestone discovery between two milestones still re-runs
+  // and correctly resolves to "not a milestone bump" -> hidden.
+  //
+  // useLayoutEffect (not useEffect): it commits the milestoneActive flip BEFORE
+  // the browser paints, so on the milestone's own render the gold class +
+  // marker + the larger keyframe are in place from the first painted frame
+  // instead of flashing the normal bump for a frame and then restarting the
+  // animation into the gold one. Together with the synchronous isMilestoneBump
+  // gate above, both the milestone render and the one right after it paint
+  // correctly on the first frame.
+  const currentBumpKey = bumpKeyRef.current;
+  useLayoutEffect(() => {
+    if (currentBumpKey > 0 && milestoneKeyRef.current === currentBumpKey) {
+      setMilestoneActive(true);
+      const id = setTimeout(() => setMilestoneActive(false), 600);
+      return () => clearTimeout(id);
+    }
+    // Any non-milestone bump (or first paint) leaves the flourish hidden.
+    setMilestoneActive(false);
+    return undefined;
+  }, [currentBumpKey]);
+
+  // Final visible state of the flourish: this render's bump must BE the milestone
+  // one (synchronous, kills the post-milestone flash) AND the timed window must
+  // still be open (self-clearing, kills the stuck-gold-on-later-re-render). Gates
+  // both the gold class and the "NN!" marker off one value so they never diverge.
+  const showMilestone = isMilestoneBump && milestoneActive;
 
   // Show the onboarding hint until the player has discovered more than the 5
   // default words, or until they dismiss it manually.
@@ -82,7 +197,25 @@ function App() {
       <div className="container" style={{ margin: "auto" }}>
         <div className="topbar">
           <TitleHeader />
-          <WordCombo wordState={gameState.wordState} words={gameState.words} loadingWord={loadingWord} newWord={newWord} loadingError={loadingError} />
+          {/* milestoneReached: a first-find that crossed a milestone count, so the
+              combo-result live region can fold a milestone cue into the single
+              sentence it already announces (the visual gold flourish is
+              aria-hidden, so without this AT users get no signal that a round
+              number was crossed). Derived from the current state + count, not the
+              transient showMilestone flag, so it stays stable for the whole
+              RESULT_HOLD window and the live region announces it exactly once. */}
+          <WordCombo
+            wordState={gameState.wordState}
+            words={gameState.words}
+            loadingWord={loadingWord}
+            newWord={newWord}
+            loadingError={loadingError}
+            milestoneReached={
+              !!gameState.wordState.new &&
+              gameState.wordState.isFirstFound &&
+              isMilestone(discoveredCount)
+            }
+          />
           {/* Quiet running total of discoveries. Visual-only (no live region):
               WordCombo's combo-result region already announces the discovery
               sentence in the same render commit, so a polite live region here
@@ -93,10 +226,60 @@ function App() {
               prefers-reduced-motion there. */}
           <span
             key={bumpKeyRef.current}
-            className={`discovery-count${bumpKeyRef.current > 0 ? " bump" : ""}`}
+            className={`discovery-count${
+              bumpKeyRef.current > 0
+                ? showMilestone
+                  ? " bump milestone"
+                  : " bump"
+                : ""
+            }`}
           >
             {discoveredCount} discovered
+            {/* One-beat inline marker on the milestone span only. Driven by the
+                same showMilestone value as the gold class, so it shows for the
+                ~0.5s flourish on the milestone discovery and then clears — it does
+                NOT linger through later filter/sort re-renders, and it does NOT
+                flash on the discovery right after a milestone.
+                aria-hidden: the visual "50!" is decorative emphasis on the
+                already-present "50 discovered" count, so it shouldn't double up
+                for a screen reader (and the count line itself is visual-only —
+                WordCombo's status region owns the announcement). */}
+            {showMilestone ? (
+              <span className="discovery-milestone-marker" aria-hidden="true">
+                {" "}
+                {discoveredCount}!
+              </span>
+            ) : null}
           </span>
+          {/* Grid navigation aids: live substring filter + render-order control.
+              Sits below the discovery line in the sticky topbar so they're always
+              reachable while scrolling a large collection. Both are client-only —
+              no game/reducer state. */}
+          <div className="grid-controls">
+            <input
+              type="search"
+              className="grid-filter"
+              value={filter}
+              onInput={(e) => setFilter(e.currentTarget.value)}
+              placeholder="Filter…"
+              aria-label="Filter crafted words"
+            />
+            <button
+              type="button"
+              className="sort-toggle"
+              onClick={() =>
+                setSortMode((m) => (m === "newest" ? "alpha" : "newest"))
+              }
+              aria-label={
+                sortMode === "newest"
+                  ? "Sort order: newest first. Click to sort A to Z."
+                  : "Sort order: A to Z. Click to sort newest first."
+              }
+              title={sortMode === "newest" ? "Newest first" : "A–Z"}
+            >
+              {sortMode === "newest" ? "newest" : "A–Z"}
+            </button>
+          </div>
         </div>
         {showHint ? (
           <div className="onboarding-hint" role="note">
@@ -124,6 +307,8 @@ function App() {
           onClickWord={clickWord}
           words={gameState.words}
           queueEmpty={gameState.wordsQueue.length === 0}
+          filter={filter}
+          sortMode={sortMode}
         />
       </div>
       <ResetButton confirmReset={gameState.confirmReset} resetWords={resetWords} />
