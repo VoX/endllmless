@@ -11,5 +11,12 @@ export default defineConfig({
 		proxy: {
 			'/api': api,
 		}
-	}
+	},
+	test: {
+		// The reducer is pure data-in/data-out, so the default node environment is
+		// enough (no DOM) and we avoid pulling in jsdom/happy-dom.
+		environment: 'node',
+		globals: true,
+		include: ['src/**/*.test.{js,jsx}'],
+	},
 });

@@ -13,20 +13,39 @@ const openai = new OpenAI({
 });
 var router = express.Router();
 
-router.get('/', async (req, res, next) => {
-  let wordOne = req.query?.wordone;
-  let wordTwo = req.query?.wordtwo;
+const MAX_WORD_LEN = 40;
 
-  if (!wordOne || !wordTwo) {
+// Normalize a raw query word for safe use in the prompt and cache key. Strips
+// control chars (C0 \u0000-\u001F, DEL \u007F, C1 \u0080-\u009F), collapses
+// any internal whitespace run to a single space, then trims. Returns null for
+// non-strings (e.g. ?wordone=a&wordone=b yields an array) or anything that's
+// empty/too long after cleanup, so the caller can 400. The endpoint is public
+// and unauthenticated; this bounds prompt/token cost and cache-key abuse without
+// affecting normal play (real words are short).
+function sanitizeWord(raw) {
+  if (typeof raw !== 'string') return null;
+  const cleaned = raw
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001F\u007F-\u009F]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned || cleaned.length > MAX_WORD_LEN) return null;
+  return cleaned;
+}
+
+router.get('/', async (req, res, next) => {
+  const rawOne = req.query?.wordone;
+  const rawTwo = req.query?.wordtwo;
+
+  if (!rawOne || !rawTwo) {
     next();
     return;
   }
 
-  // Reject non-string (e.g. ?wordone=a&wordone=b yields an array) and overlong
-  // input. The endpoint is public and unauthenticated; this bounds prompt/token
-  // cost and cache-key abuse without affecting normal play (real words are short).
-  if (typeof wordOne !== 'string' || typeof wordTwo !== 'string' ||
-      wordOne.length > 40 || wordTwo.length > 40) {
+  let wordOne = sanitizeWord(rawOne);
+  let wordTwo = sanitizeWord(rawTwo);
+
+  if (wordOne === null || wordTwo === null) {
     return res.status(400).json({ error: 'invalid input' });
   }
 
@@ -34,7 +53,12 @@ router.get('/', async (req, res, next) => {
     [wordOne, wordTwo] = [wordTwo, wordOne];
   }
 
-  const cacheKey = `${wordOne}+${wordTwo}`;
+  // Normalize the cache key so case/whitespace variants collide on one entry:
+  // "Fire", "fire", and " fire " all map to the same cached result. The lowered
+  // pair is re-sorted because lowercasing can change ASCII ordering relative to
+  // the (already sorted) display words.
+  const [keyOne, keyTwo] = [wordOne.toLowerCase(), wordTwo.toLowerCase()].sort();
+  const cacheKey = `${keyOne}+${keyTwo}`;
   if (wordCache.has(cacheKey)) {
     return res.json(wordCache.get(cacheKey));
   }

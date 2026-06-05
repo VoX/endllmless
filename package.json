@@ -11,9 +11,11 @@
     "dev:client": "npm --workspace client run dev",
     "dev:server": "npm --workspace server run dev",
     "build": "npm run build:client",
-    "build:client": "npm --workspace client run build"
+    "build:client": "npm --workspace client run build",
+    "test": "npm run test --workspaces --if-present"
   },
   "devDependencies": {
-    "concurrently": "^9.2.1"
+    "concurrently": "^9.2.1",
+    "vitest": "4.1.7"
   }
 }
