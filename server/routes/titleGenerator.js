@@ -52,7 +52,6 @@ router.get('/', async (req, res, next) => {
             const content = completion?.choices?.[0]?.message?.content;
             if (typeof content !== 'string') throw new Error('no completion content');
             const data = JSON.parse(content);
-            console.log("generated titles:", data?.titles);
             const titles = (data?.titles || [])
                 .map(t => String(t).replace(/^CRAFT\s+/i, '').replace(/\s+THINGS$/i, '').trim())
                 .filter(t => t.length);

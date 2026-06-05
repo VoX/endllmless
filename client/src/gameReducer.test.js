@@ -1,14 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { gameReducer, initialGameState } from './gameReducer.js';
-
-// gameReducer logs every transition via console.log; silence it so the test
-// output stays readable without changing reducer behavior.
-beforeEach(() => {
-  vi.spyOn(console, 'log').mockImplementation(() => {});
-});
-afterEach(() => {
-  vi.restoreAllMocks();
-});
 
 // Helper: a state that already has a first+second selected and is mid-flight, so
 // new_word / loading_error transitions have a concrete pair to act on.

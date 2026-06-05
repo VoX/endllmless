@@ -32,9 +32,7 @@ export const initializeState = (initialValue) => {
 };
 
 export function gameReducer(state, action) {
-    const newState = innerGameReducer(state, action);
-    console.log("Game state updated:", action, newState);
-    return newState;
+    return innerGameReducer(state, action);
 }
 
 function innerGameReducer(state, action) {
