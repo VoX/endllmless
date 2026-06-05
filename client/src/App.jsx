@@ -6,6 +6,13 @@ import { gameReducer, initialGameState, initializeState } from "./gameReducer";
 import { WordCombo } from "./WordCombo";
 import { ResetButton } from "./ResetButton";
 
+// How long the discovered result is held on screen after a successful combine,
+// before found_delay clears it (and pops the next queued pair, if any). Sits
+// inside the result's 1s tada (SelectedWord.css) so the celebration is visible;
+// together with MIN_SPINNER_MS in WordCombo.jsx this defines how long a combine
+// "feels" — spinner floor, then this result hold.
+const RESULT_HOLD_MS = 500;
+
 function App() {
   const [gameState, dispatch] = useReducer(gameReducer, initialGameState, initializeState);
   const [hintDismissed, setHintDismissed] = useState(false);
@@ -37,7 +44,7 @@ function App() {
 
   async function newWord(word, emoji) {
     dispatch({ type: 'new_word', word, emoji });
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, RESULT_HOLD_MS));
     dispatch({ type: 'found_delay' });
   }
 
