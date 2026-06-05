@@ -24,7 +24,12 @@ vi.mock('openai', () => {
 });
 
 // Default a successful, well-formed completion. Individual tests can override.
-function okCompletion(newWord = 'Steam', newEmoji = '') {
+// The default emoji is a real single-grapheme emoji (not '') so the default
+// reflects a normal success: validateEmoji rewrites blank/non-emoji values to the
+// fallback, so a '' default would be silently transformed to '❓' and surprise any
+// test that asserts on the default body. Tests needing a bad emoji pass it
+// explicitly.
+function okCompletion(newWord = 'Steam', newEmoji = '💨') {
   return {
     choices: [{ message: { content: JSON.stringify({ newWord, newEmoji }) } }],
   };
@@ -166,8 +171,13 @@ describe('wordCombine route: cache-key normalization', () => {
 
 describe('wordCombine route: deterministic generation (temperature)', () => {
   it('passes temperature: 0 on the chat.completions.create call', async () => {
-    // Determinism fix from the playtest: without temperature: 0 the same pair
-    // drifts across cache wipes/restarts (Sun+Water -> Ocean/Rainbow/Dew).
+    // Determinism fix from the playtest: temperature: 0 (greedy decoding) sharply
+    // reduces non-determinism so the same pair stops drifting across cache wipes/
+    // restarts (Sun+Water -> Ocean/Rainbow/Dew). Note it is NOT a hard guarantee
+    // of byte-identical output on OpenRouter/Gemini — that model exposes no seed
+    // pin, and provider backend/quantization differences can still drift — so this
+    // is "much less random", not a reproducibility contract. (The title route
+    // deliberately does the opposite, see titleGenerator.js.)
     const res = await get('wordone=fire&wordtwo=water');
     expect(res.status).toBe(200);
     expect(createMock).toHaveBeenCalledTimes(1);
@@ -223,6 +233,29 @@ describe('wordCombine route: emoji validation', () => {
     const res = await get('wordone=steam&wordtwo=cloud');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ newWord: 'Rain', newEmoji: '🌧️' });
+  });
+
+  it('substitutes the fallback for a single NON-emoji grapheme (e.g. a letter)', async () => {
+    // A lone letter/digit/punctuation is one grapheme, so the count check alone
+    // would let it through and render verbatim as the tile icon. The pictographic
+    // check rejects it -> fallback. This is the "non-emoji text value" case the
+    // schema is supposed to prevent but the model can still emit on OpenRouter.
+    createMock.mockResolvedValueOnce(okCompletion('Argon', 'A'));
+
+    const res = await get('wordone=air&wordtwo=noble');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ newWord: 'Argon', newEmoji: '❓' });
+  });
+
+  it('substitutes the fallback when newEmoji is not a string (schema slippage)', async () => {
+    // Under strict json_schema slippage the model can still emit newEmoji as null
+    // or a number; validateEmoji's typeof guard must catch it rather than crash or
+    // cache a non-string. The newWord is good, so this stays a 200 with fallback.
+    createMock.mockResolvedValueOnce(okCompletion('Swamp', null));
+
+    const res = await get('wordone=peat&wordtwo=bog');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ newWord: 'Swamp', newEmoji: '❓' });
   });
 });
 

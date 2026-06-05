@@ -18,7 +18,7 @@ const MAX_WORD_LEN = 40;
 // Shown instead of a bad icon so a flawed emoji never produces a blank/garbled
 // tile (the word is still good — see validateEmoji). The doc suggests a default
 // such as a question-mark emoji.
-const FALLBACK_EMOJI = '❓'; // ❓
+const FALLBACK_EMOJI = '❓';
 
 // Count user-perceived characters (graphemes). A single emoji can be several
 // code points (ZWJ sequences like 👨‍👩‍👧, flags, skin-tone/variation modifiers),
@@ -40,15 +40,26 @@ function graphemeCount(str) {
 
 // Validate the model's emoji and return a safe value to cache/serve. The schema
 // asks for exactly one emoji, but on OpenRouter the model still returns empty,
-// whitespace-only, or multi-glyph values (e.g. "🚢🔥"). We never 502 on a bad
-// emoji alone — the newWord is the valuable field — so on any failure we
-// substitute FALLBACK_EMOJI rather than caching a blank/garbled tile. A valid
-// single-grapheme emoji round-trips verbatim.
+// whitespace-only, multi-glyph (e.g. "🚢🔥"), or plain-TEXT values (a stray "?",
+// a lone letter/digit, a CJK char — all of which are a single grapheme and would
+// otherwise sail through the count check and render verbatim as the tile icon).
+// We never 502 on a bad emoji alone — the newWord is the valuable field — so on
+// any failure we substitute FALLBACK_EMOJI rather than caching a blank/garbled/
+// non-emoji tile. A valid single-grapheme emoji round-trips verbatim.
+//
+// The single-grapheme count check runs FIRST so multi-glyph still fails; the
+// pictographic check then rejects non-emoji single graphemes. \p{Extended_Pictographic}
+// matches the emoji base of keycaps/flags/ZWJ sequences too, so those still pass
+// once they're a single grapheme. It deliberately does NOT re-run the C0/C1
+// control-char strip from sanitizeWord — a single control/format char is not
+// Extended_Pictographic, so it's already rejected here, and the json_schema
+// constrains output regardless.
 function validateEmoji(raw) {
   if (typeof raw !== 'string') return FALLBACK_EMOJI;
   const trimmed = raw.trim();
   if (!trimmed) return FALLBACK_EMOJI; // empty or whitespace-only
   if (graphemeCount(trimmed) !== 1) return FALLBACK_EMOJI; // multi-glyph
+  if (!/\p{Extended_Pictographic}/u.test(trimmed)) return FALLBACK_EMOJI; // non-emoji text (letter/digit/punct/CJK)
   return trimmed;
 }
 
