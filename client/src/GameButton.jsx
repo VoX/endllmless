@@ -1,5 +1,17 @@
 import { useEffect, useRef, useState } from "preact/hooks";
+import { baseWords } from "./gameReducer.js";
 import "./GameButton.css";
+
+// Set for O(1) "is this one of the five primordial elements?" checks in render.
+const baseWordSet = new Set(baseWords);
+
+// Honor the OS reduced-motion preference for the scroll-into-view reward: smooth
+// scroll when motion is allowed, instant jump otherwise. Guarded for non-browser
+// / older environments where matchMedia may be absent.
+const prefersReducedMotion = () =>
+  typeof window !== "undefined" &&
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // word: string, onClick: Function
 const GameButton = ({ emoji, onClick, word }) => {
@@ -19,23 +31,42 @@ const GameButton = ({ emoji, onClick, word }) => {
 // words: string[]
 export const GameButtonsContainer = ({ onClickWord, words }) => {
   const [tadaWord, setTadaWord] = useState(null);
+  // Persistent accent ring on the most recently crafted word. Unlike the 1s
+  // transient `tada`, this stays until the next selection/combine starts so a
+  // brand-new tile doesn't immediately blend back into the grid. Local state
+  // only — no new global/reducer state.
+  const [newWord, setNewWord] = useState(null);
   const [selectedWords, setSelectedWords] = useState([]);
   const [fadeOutWords, setFadeOutWords] = useState([]);
   const prevWords = useRef(Object.keys(words));
+  // word -> tile button element, so a freshly crafted tile (which appends at the
+  // end of the flex-wrap grid, often below the fold) can be scrolled into view.
+  const tileRefs = useRef(new Map());
 
   // Track new word for tada animation
   useEffect(() => {
     const currentWords = Object.keys(words);
     let tadaTarget = null;
     if (currentWords.length > prevWords.current.length) {
-      const newWord = currentWords.find((w) => !prevWords.current.includes(w));
-      tadaTarget = newWord;
+      const found = currentWords.find((w) => !prevWords.current.includes(w));
+      tadaTarget = found;
     }
     // Always fade out highlight after a selection attempt
     if (tadaTarget) {
       setTadaWord(null);
       setTimeout(() => setTadaWord(tadaTarget), 0);
       setTimeout(() => setTadaWord(null), 1000);
+      // Persistent ring + scroll the reward into view. The tile is already in
+      // the DOM (this effect runs after the render that added it), so its ref is
+      // populated. Smooth scroll when motion is allowed; instant under reduce.
+      setNewWord(tadaTarget);
+      const tileEl = tileRefs.current.get(tadaTarget);
+      if (tileEl && typeof tileEl.scrollIntoView === "function") {
+        tileEl.scrollIntoView({
+          behavior: prefersReducedMotion() ? "auto" : "smooth",
+          block: "nearest",
+        });
+      }
     }
     if (selectedWords.length === 2 || selectedWords.length === 1) {
       setFadeOutWords(selectedWords);
@@ -48,6 +79,8 @@ export const GameButtonsContainer = ({ onClickWord, words }) => {
   // Track selected words for highlight
   function handleClick(word) {
     if (onClickWord) onClickWord(word);
+    // Starting a new selection clears the persistent new-tile ring.
+    setNewWord(null);
     setSelectedWords((prev) => {
       if (prev.length < 2 && !prev.includes(word)) {
         return [...prev, word];
@@ -71,15 +104,27 @@ export const GameButtonsContainer = ({ onClickWord, words }) => {
     >
       {Object.keys(words).map((word) => {
         let btnClass = "game-button";
+        if (baseWordSet.has(word)) btnClass += " base-tile";
         if (tadaWord === word) btnClass += " tada";
+        // Persistent new ring, suppressed while selected/fading so it doesn't
+        // stack with those backgrounds (the tile that was just combined is the
+        // new one, and its fade-out runs first).
         const isSelected = selectedWords.includes(word);
+        const isFadingOut = fadeOutWords.includes(word);
+        if (newWord === word && !isSelected && !isFadingOut) {
+          btnClass += " is-new";
+        }
         if (isSelected) btnClass += " selected";
-        if (fadeOutWords.includes(word)) btnClass += " selected fade-out";
+        if (isFadingOut) btnClass += " selected fade-out";
         return (
           <div className="game-button-item" role="listitem" key={word}>
             <button
               type="button"
               className={btnClass}
+              ref={(el) => {
+                if (el) tileRefs.current.set(word, el);
+                else tileRefs.current.delete(word);
+              }}
               onClick={() => handleClick(word)}
               aria-label={word}
               aria-pressed={isSelected}

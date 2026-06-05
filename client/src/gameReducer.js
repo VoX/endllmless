@@ -6,6 +6,12 @@ const defaultWords = {
     wind: "🌬️",
 };
 
+// The five primordial elements. Exported (keys only) so the tile grid can give
+// the starting set a distinct "foundational" treatment vs. crafted words. Kept
+// as a frozen snapshot of the keys so consumers can't accidentally mutate the
+// source object, and so the reducer's own use of defaultWords is unaffected.
+export const baseWords = Object.freeze(Object.keys(defaultWords));
+
 const defaultWordState = {
     first: "",
     second: "",
