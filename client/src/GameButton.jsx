@@ -28,9 +28,14 @@ const GameButton = ({ emoji, onClick, word }) => {
   );
 };
 
-// words: string[]
-export const GameButtonsContainer = ({ onClickWord, words }) => {
+// words: string[], queueEmpty: boolean (no further queued combines pending)
+export const GameButtonsContainer = ({ onClickWord, words, queueEmpty }) => {
   const [tadaWord, setTadaWord] = useState(null);
+  // Latest queueEmpty in a ref so the new-tile effect (which must stay keyed on
+  // `words` so it only fires when a tile actually appears) can read the current
+  // value without adding it to the dep array and re-running on every queue tick.
+  const queueEmptyRef = useRef(queueEmpty);
+  queueEmptyRef.current = queueEmpty;
   // Persistent accent ring on the most recently crafted word. Unlike the 1s
   // transient `tada`, this stays until the next selection/combine starts so a
   // brand-new tile doesn't immediately blend back into the grid. Local state
@@ -61,16 +66,26 @@ export const GameButtonsContainer = ({ onClickWord, words }) => {
       // populated. Smooth scroll when motion is allowed; instant under reduce.
       setNewWord(tadaTarget);
       const tileEl = tileRefs.current.get(tadaTarget);
-      if (tileEl && typeof tileEl.scrollIntoView === "function") {
-        // Only scroll if the new tile is actually off-screen. Without this, every
-        // combine yanks the viewport to the bottom of the grid — stealing the
-        // player away from the result celebration playing in the sticky topbar,
-        // and stacking N fighting smooth-scrolls on an N-deep queued batch. When
-        // the tile is already visible, the celebration is already on screen, so
-        // there's nothing to scroll to. (scroll-margin-top in the CSS keeps the
-        // tile clear of the sticky topbar when we do scroll.)
+      // Only scroll on the LAST tile of a batch (queue drained). During a rapid
+      // multi-combine each resolved word appends lower in the grid and would be
+      // off-screen, so without this gate the viewport chases the grid bottom
+      // across the whole batch — stealing the player from the result celebration
+      // in the sticky topbar and stacking N fighting smooth-scrolls. When more
+      // combines are still queued we leave the viewport put and let the final
+      // resolution do the single scroll.
+      if (queueEmptyRef.current && tileEl && typeof tileEl.scrollIntoView === "function") {
+        // Treat the region behind the sticky, z-indexed topbar (App.css .topbar)
+        // as NOT visible: on narrow screens it stacks several rows (wrapped
+        // title + combo + discovery line + optional error), so a tile whose top
+        // sits just below 0 can still be occluded by the bar. Measure the live
+        // bar height instead of assuming a fixed offset, and only skip the
+        // scroll when the tile is fully clear of it. (scroll-margin-top in the
+        // CSS keeps the tile off the bar when we do scroll.)
+        const topbarEl =
+          typeof document !== "undefined" ? document.querySelector(".topbar") : null;
+        const topbarBottom = topbarEl ? topbarEl.getBoundingClientRect().bottom : 0;
         const r = tileEl.getBoundingClientRect();
-        const visible = r.top >= 0 && r.bottom <= window.innerHeight;
+        const visible = r.top >= topbarBottom && r.bottom <= window.innerHeight;
         if (!visible) {
           tileEl.scrollIntoView({
             behavior: prefersReducedMotion() ? "auto" : "smooth",

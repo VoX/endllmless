@@ -72,13 +72,28 @@ export const TitleHeader = () => {
 
     return (
         <div className="title-header">
-            <h1 className="title-heading">
+            {/* Stable accessible name so heading navigation (screen-reader rotor)
+                reports a constant top-level landmark, even though the visible
+                flavor word rotates every 5-15s. Without this the h1's accessible
+                name would mutate constantly ("CRAFT fire THINGS" ->
+                "CRAFT water THINGS"), making it useless as a landmark. The
+                rotating word stays visual-only inside. */}
+            <h1 className="title-heading" aria-label="Craft things">
                 {/* Only the dynamic word animates; "CRAFT" and "THINGS" stay put.
                     The wrapper reserves the word's space so the outgoing copy can
                     fade/rise out from an absolute layer without shifting layout. */}
                 CRAFT{" "}
                 <span className="title-word-wrap">
-                    <span key={titleWord} className="title-word title-word-in">
+                    {/* Only fade the incoming word UP when there's a real
+                        crossfade in flight (an outgoing prevWord is stacked
+                        behind it). On the initial mount and the silent-seed path
+                        (first fetch) prevWord is null, so the word swaps in with
+                        no unsolicited entrance animation — mirroring the seed
+                        suppression in swapTitle above. */}
+                    <span
+                        key={titleWord}
+                        className={`title-word${prevWord !== null ? " title-word-in" : ""}`}
+                    >
                         {titleWord}
                     </span>
                     {prevWord !== null ? (

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { gameReducer, initialGameState } from './gameReducer.js';
+import { gameReducer, initialGameState, baseWords } from './gameReducer.js';
 
 // Helper: a state that already has a first+second selected and is mid-flight, so
 // new_word / loading_error transitions have a concrete pair to act on.
@@ -12,6 +12,30 @@ const pairState = (overrides = {}) => ({
     loading: true,
     ...overrides,
   },
+});
+
+describe('baseWords', () => {
+  it('is the frozen, sorted-by-source snapshot of the default word keys', () => {
+    // The five primordial elements the tile grid marks as "foundational".
+    expect(baseWords).toEqual(['earth', 'fire', 'life', 'water', 'wind']);
+  });
+
+  it('is frozen so consumers cannot mutate the source set', () => {
+    expect(Object.isFrozen(baseWords)).toBe(true);
+    // A mutation attempt must not change the snapshot (silently ignored in
+    // sloppy mode; the frozen check above is the real guarantee).
+    expect(() => {
+      try { baseWords.push('steam'); } catch { /* strict-mode throw is fine */ }
+    }).not.toThrow();
+    expect(baseWords).toEqual(['earth', 'fire', 'life', 'water', 'wind']);
+  });
+
+  it('matches the default discovered set the game starts/resets to', () => {
+    // baseWords (grid's "foundational" marker) and initialGameState.words (the
+    // reducer's default set) must stay in lockstep, or a reset would leave tiles
+    // that no longer read as foundational.
+    expect([...baseWords].sort()).toEqual(Object.keys(initialGameState.words).sort());
+  });
 });
 
 describe('gameReducer: new_word / isFirstFound', () => {

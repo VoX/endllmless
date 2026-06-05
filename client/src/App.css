@@ -135,9 +135,13 @@
   margin-top: var(--space-2);
   color: var(--text-muted);
   font-size: 0.8rem;
-  /* Subtle "+1" cue: the span is keyed on the count in App.jsx, so React
-     remounts it on each change and this short bump replays once. Guarded by
-     prefers-reduced-motion below — no unguarded motion. */
+}
+
+/* Subtle "+1" cue, applied (in App.jsx) only when the total actually GROWS — the
+   span is remounted on a growth-only key, so this short bump replays once per new
+   discovery and never on first paint or a reset shrink. Guarded by
+   prefers-reduced-motion below — no unguarded motion. */
+.discovery-count.bump {
   animation: discovery-bump 0.3s ease-out;
 }
 
@@ -161,7 +165,7 @@
    per-component blocks in Spinner.css): the count still updates, just with no
    bump animation. */
 @media (prefers-reduced-motion: reduce) {
-  .discovery-count {
+  .discovery-count.bump {
     animation: none;
   }
 }
