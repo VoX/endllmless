@@ -17,9 +17,15 @@ function App() {
   const [gameState, dispatch] = useReducer(gameReducer, initialGameState, initializeState);
   const [hintDismissed, setHintDismissed] = useState(false);
 
+  // The whole game loop is accumulation (THEORY-OF-THE-GAME.md: "the collection
+  // growing IS the progress bar"), so surface the running total. Derived from
+  // game state — no reducer changes; it tracks every add and falls back to the
+  // 5 defaults after a reset for free.
+  const discoveredCount = Object.keys(gameState.words).length;
+
   // Show the onboarding hint until the player has discovered more than the 5
   // default words, or until they dismiss it manually.
-  const showHint = !hintDismissed && Object.keys(gameState.words).length <= 5;
+  const showHint = !hintDismissed && discoveredCount <= 5;
 
   // Reset safety: once "Are You Sure?" is showing, auto-revert after 3s if the
   // player doesn't confirm with a second click. Cleanup clears the timer when
@@ -62,6 +68,12 @@ function App() {
         <div className="topbar">
           <TitleHeader />
           <WordCombo wordState={gameState.wordState} words={gameState.words} loadingWord={loadingWord} newWord={newWord} loadingError={loadingError} />
+          {/* Quiet running total of discoveries. Keyed on the count so the
+              subtle bump animation (App.css) replays on each new word; the
+              keyframe is suppressed under prefers-reduced-motion there. */}
+          <span key={discoveredCount} className="discovery-count" role="status" aria-live="polite">
+            {discoveredCount} discovered
+          </span>
         </div>
         {showHint ? (
           <div className="onboarding-hint" role="note">
