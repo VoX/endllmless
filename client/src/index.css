@@ -313,6 +313,25 @@ button:hover {
     animation: none !important;
   }
 
+  /* New-tile entrance: drop the scale, keep an opacity-only fade so the reveal
+     still registers without any motion (consistent with how tada is neutralized
+     above). !important for the same cascade reason — this index.css block is
+     bundled before GameButton.css. A short reduced-motion fade keyframe avoids a
+     transform entirely. */
+  .game-button.tile-enter {
+    animation: tile-enter-reduced 0.22s ease-out 1 !important;
+  }
+
+  @keyframes tile-enter-reduced {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
   /* Drop the translateY hover lift but keep the color/shadow change from the
      base :hover rule so tiles still signal interactivity. (The :active state is
      already flat — its base rule is translateY(0) — so it needs no override.) */

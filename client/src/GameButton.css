@@ -86,6 +86,37 @@
   animation: tada 1s ease 1;
 }
 
+/* ---- New-tile entrance pop ----
+   A short scale+fade so a freshly crafted tile arrives with "a beat of motion"
+   instead of blinking in at full size (README theory: the reveal should land).
+   This animates transform:scale, exactly like tada — two scale animations on one
+   element would fight — so GameButton.jsx SEQUENCES them: the entrance plays
+   first (this class, ~220ms, TILE_ENTER_MS), and tada is deferred to start only
+   after it finishes. They never run on the same tile at the same time. The
+   is-new ring composes fine throughout (it's box-shadow, a different property).
+   transform-origin:center so the pop grows from the tile's middle. */
+.game-button.tile-enter {
+  animation: tile-enter 0.22s ease-out 1;
+  transform-origin: center;
+}
+
+@keyframes tile-enter {
+  0% {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+
+  70% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .game-button.selected,
 .game-button.selected:hover {
   background: var(--tile-selected);
@@ -160,6 +191,19 @@
    harmless in light (where --focus is already a contrasting blue). */
 .game-button.is-new:focus-visible {
   outline-offset: 5px;
+}
+
+/* Muted empty state shown when the active filter excludes every tile. Mirrors
+   the .onboarding-hint treatment (surface card, hairline border, muted text) so
+   it reads as a quiet system note, not an error. */
+.grid-empty {
+  margin: 0 auto;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--shadow-color);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: 0.85rem;
 }
 
 @media (min-width: 720px) {

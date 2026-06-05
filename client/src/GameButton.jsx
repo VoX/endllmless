@@ -13,6 +13,41 @@ const prefersReducedMotion = () =>
   typeof window.matchMedia === "function" &&
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+// New-tile entrance: a short scale+fade pop so a freshly crafted word arrives
+// with "a beat of motion" instead of blinking in at full size (README theory:
+// the reveal should land). Kept in sync with the tile-enter @keyframes duration
+// in GameButton.css. The is-new ring (box-shadow) can run alongside this, but
+// the 1s tada (transform:scale) cannot — two scale animations on one element
+// fight — so tada is deferred until this entrance finishes (see the effect
+// below), and this duration is how long we wait.
+const TILE_ENTER_MS = 220;
+
+// Case-insensitive substring match for the grid filter. An empty/whitespace-only
+// query matches everything (no filtering). Shared by the render-time .filter and
+// the new-tile scroll guard so "is this word currently shown?" is decided one way.
+const matchesQuery = (word, query) => {
+  const q = (query || "").trim().toLowerCase();
+  if (!q) return true;
+  return word.toLowerCase().includes(q);
+};
+
+// Derive the grid's render order from the raw discovery-order word keys.
+// "newest" = most recent discovery on top (insertion order reversed); "alpha" =
+// case-insensitive A-Z. `words` stays the source of truth — this only reorders
+// the keys for rendering, so all word-keyed state (is-new, base-tile, selected)
+// is unaffected.
+const orderWords = (keys, sortMode) => {
+  if (sortMode === "alpha") {
+    // Copy before sorting: never mutate the caller's array (Object.keys result
+    // is fresh here, but keep the function pure for any future reuse).
+    return [...keys].sort((a, b) => a.localeCompare(b));
+  }
+  if (sortMode === "newest") {
+    return [...keys].reverse();
+  }
+  return keys;
+};
+
 // word: string, onClick: Function
 const GameButton = ({ emoji, onClick, word }) => {
   return (
@@ -28,14 +63,27 @@ const GameButton = ({ emoji, onClick, word }) => {
   );
 };
 
-// words: string[], queueEmpty: boolean (no further queued combines pending)
-export const GameButtonsContainer = ({ onClickWord, words, queueEmpty }) => {
+// words: { [word]: { emoji, from } }
+// queueEmpty: boolean (no further queued combines pending)
+// filter: string (live substring filter for the grid; "" = no filtering)
+// sortMode: "newest" | "alpha" (grid render order)
+export const GameButtonsContainer = ({ onClickWord, words, queueEmpty, filter = "", sortMode = "newest" }) => {
   const [tadaWord, setTadaWord] = useState(null);
+  // The just-crafted tile currently playing its one-shot entrance pop. Cleared
+  // after the entrance finishes so the class doesn't re-apply on later renders.
+  const [enterWord, setEnterWord] = useState(null);
   // Latest queueEmpty in a ref so the new-tile effect (which must stay keyed on
   // `words` so it only fires when a tile actually appears) can read the current
   // value without adding it to the dep array and re-running on every queue tick.
   const queueEmptyRef = useRef(queueEmpty);
   queueEmptyRef.current = queueEmpty;
+  // Latest filter/sortMode in refs for the same reason: the new-tile effect must
+  // stay keyed on `words` only, but its scroll-guard needs the CURRENT filter and
+  // sort to decide whether the new tile is actually visible (and on top).
+  const filterRef = useRef(filter);
+  filterRef.current = filter;
+  const sortModeRef = useRef(sortMode);
+  sortModeRef.current = sortMode;
   // Persistent accent ring on the most recently crafted word. Unlike the 1s
   // transient `tada`, this stays until the next selection/combine starts so a
   // brand-new tile doesn't immediately blend back into the grid. Local state
@@ -58,14 +106,32 @@ export const GameButtonsContainer = ({ onClickWord, words, queueEmpty }) => {
     }
     // Always fade out highlight after a selection attempt
     if (tadaTarget) {
+      // Entrance pop FIRST, then tada — both animate transform:scale on the
+      // same tile, so running them concurrently would double-scale and jank.
+      // The entrance is a one-shot class cleared after TILE_ENTER_MS; tada is
+      // deferred to start only once the entrance has finished. (Under reduced
+      // motion the entrance CSS is opacity-only/instant and tada is fully
+      // neutralized in CSS, so this sequencing is a no-op there — but the same
+      // code path runs harmlessly.)
+      setEnterWord(tadaTarget);
       setTadaWord(null);
-      setTimeout(() => setTadaWord(tadaTarget), 0);
-      setTimeout(() => setTadaWord(null), 1000);
+      setTimeout(() => setEnterWord(null), TILE_ENTER_MS);
+      setTimeout(() => setTadaWord(tadaTarget), TILE_ENTER_MS);
+      setTimeout(() => setTadaWord(null), TILE_ENTER_MS + 1000);
       // Persistent ring + scroll the reward into view. The tile is already in
       // the DOM (this effect runs after the render that added it), so its ref is
       // populated. Smooth scroll when motion is allowed; instant under reduce.
       setNewWord(tadaTarget);
       const tileEl = tileRefs.current.get(tadaTarget);
+      // Don't chase a tile the player can't currently see-as-the-reward:
+      //  - "newest" sort already puts the new tile at the grid top, right under
+      //    the topbar, so the append-at-end scroll assumption no longer holds —
+      //    skip it (the tile is already where the eye is).
+      //  - a tile excluded by the active filter isn't rendered at all, so there's
+      //    nothing to scroll to (its ref is also gone); guard explicitly so the
+      //    reward chase can't target a filtered-out word.
+      const matchesFilter = matchesQuery(tadaTarget, filterRef.current);
+      const skipScroll = sortModeRef.current === "newest" || !matchesFilter;
       // Only scroll on the LAST tile of a batch (queue drained). During a rapid
       // multi-combine each resolved word appends lower in the grid and would be
       // off-screen, so without this gate the viewport chases the grid bottom
@@ -73,7 +139,7 @@ export const GameButtonsContainer = ({ onClickWord, words, queueEmpty }) => {
       // in the sticky topbar and stacking N fighting smooth-scrolls. When more
       // combines are still queued we leave the viewport put and let the final
       // resolution do the single scroll.
-      if (queueEmptyRef.current && tileEl && typeof tileEl.scrollIntoView === "function") {
+      if (!skipScroll && queueEmptyRef.current && tileEl && typeof tileEl.scrollIntoView === "function") {
         // Treat the region behind the sticky, z-indexed topbar (App.css .topbar)
         // as NOT visible: on narrow screens it stacks several rows (wrapped
         // title + combo + discovery line + optional error), so a tile whose top
@@ -100,11 +166,12 @@ export const GameButtonsContainer = ({ onClickWord, words, queueEmpty }) => {
       setSelectedWords([]);
     }
     // The word set shrank (reset back to the 5 defaults, or any future removal):
-    // the new/tada highlights point at a tile that no longer exists, so clear the
-    // transient state instead of letting it dangle as stale refs.
+    // the new/tada/enter highlights point at a tile that no longer exists, so
+    // clear the transient state instead of letting it dangle as stale refs.
     if (currentWords.length < prevWords.current.length) {
       setNewWord(null);
       setTadaWord(null);
+      setEnterWord(null);
     }
     prevWords.current = currentWords;
   }, [words]);
@@ -129,15 +196,43 @@ export const GameButtonsContainer = ({ onClickWord, words, queueEmpty }) => {
     setFadeOutWords([]); // Remove fade-out if re-selecting
   }
 
+  // Derived render order + active filter. `words` is unchanged (source of truth);
+  // we only reorder/narrow the KEYS for display, so every word-keyed visual state
+  // below stays correct regardless of order or filter.
+  const visibleWords = orderWords(Object.keys(words), sortMode).filter((word) =>
+    matchesQuery(word, filter)
+  );
+
+  // Filter excluded everything that exists: show a muted empty state instead of a
+  // blank grid so the player knows the filter is the reason, not a load failure.
+  // (Only reachable when there's a non-empty query — an empty query matches all,
+  // and the grid always has the 5 base words.)
+  if (visibleWords.length === 0) {
+    return (
+      <div
+        className="game-buttons-container"
+        role="list"
+        aria-label="Crafted words. Select two to combine them."
+      >
+        <p className="grid-empty" role="note">
+          no matches
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div
       className="game-buttons-container"
       role="list"
       aria-label="Crafted words. Select two to combine them."
     >
-      {Object.keys(words).map((word) => {
+      {visibleWords.map((word) => {
         let btnClass = "game-button";
         if (baseWordSet.has(word)) btnClass += " base-tile";
+        // One-shot entrance pop on the freshly crafted tile. Sequenced before
+        // tada (see the effect) so the two scale animations never overlap.
+        if (enterWord === word) btnClass += " tile-enter";
         if (tadaWord === word) btnClass += " tada";
         // Persistent new ring. The suppression below is defensive only: the new
         // tile is never the one that fades out (fadeOutWords holds the two SOURCE

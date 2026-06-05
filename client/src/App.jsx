@@ -14,9 +14,48 @@ import { ResetButton } from "./ResetButton";
 // spinner floor, then this result hold.
 const RESULT_HOLD_MS = 500;
 
+// Grid sort modes, persisted in localStorage like the theme choice. "newest"
+// shows the most recent discovery on top (Object.keys reversed); "alpha" sorts
+// A-Z. Default is "newest" so the existing append-then-celebrate flow is
+// preserved for a player who never touches the control.
+const SORT_KEY = "sortMode";
+const SORT_MODES = ["newest", "alpha"];
+function getInitialSortMode() {
+  try {
+    const saved = localStorage.getItem(SORT_KEY);
+    if (SORT_MODES.includes(saved)) return saved;
+  } catch {
+    // localStorage can throw in private mode; fall through to the default.
+  }
+  return "newest";
+}
+
+// Milestone thresholds for the discovery-counter flourish. Crossing one of these
+// (low round numbers) or any multiple of 25 swaps the normal +1 bump for a
+// slightly bigger golden one-shot — a lightweight authored hook against the
+// mid-game "I made 400 things, so what?" plateau (see README theory).
+const MILESTONES = new Set([10, 25, 50, 100, 250, 500]);
+const isMilestone = (n) => MILESTONES.has(n) || (n > 0 && n % 25 === 0);
+
 function App() {
   const [gameState, dispatch] = useReducer(gameReducer, initialGameState, initializeState);
   const [hintDismissed, setHintDismissed] = useState(false);
+  // Live substring filter for the grid (see SearchBar below + GameButtonsContainer).
+  // Empty string = no filtering. Client-only; never touches game state.
+  const [filter, setFilter] = useState("");
+  // Grid render order; persisted across reloads like the theme toggle.
+  const [sortMode, setSortMode] = useState(getInitialSortMode);
+
+  // Persist the chosen sort order so it survives a reload (mirrors ThemeToggle's
+  // localStorage write). Failures (private mode, quota) are non-fatal — the
+  // control still works for the session.
+  useEffect(() => {
+    try {
+      localStorage.setItem(SORT_KEY, sortMode);
+    } catch {
+      // Ignore persistence failures.
+    }
+  }, [sortMode]);
 
   // The whole game loop is accumulation (the collection growing IS the progress
   // bar — see README.md), so surface the running total. Derived from game state —
@@ -33,8 +72,16 @@ function App() {
   // is treated as the baseline, not a discovery.
   const prevCountRef = useRef(discoveredCount);
   const bumpKeyRef = useRef(0);
+  // Whether the discovery that triggered the current bump landed exactly ON a
+  // milestone count. Computed in the same growth-only block so it shares the
+  // first-paint/reset-shrink suppression: it only flips true when the count
+  // actually grew INTO a milestone value, and resets to false on any other
+  // (non-milestone) growth. A ref (not state) so reading/advancing it during
+  // render can't trigger an extra render — same rationale as bumpKeyRef.
+  const milestoneRef = useRef(false);
   if (discoveredCount > prevCountRef.current) {
     bumpKeyRef.current += 1;
+    milestoneRef.current = isMilestone(discoveredCount);
   }
   prevCountRef.current = discoveredCount;
 
@@ -93,10 +140,56 @@ function App() {
               prefers-reduced-motion there. */}
           <span
             key={bumpKeyRef.current}
-            className={`discovery-count${bumpKeyRef.current > 0 ? " bump" : ""}`}
+            className={`discovery-count${
+              bumpKeyRef.current > 0
+                ? milestoneRef.current
+                  ? " bump milestone"
+                  : " bump"
+                : ""
+            }`}
           >
             {discoveredCount} discovered
+            {/* One-beat inline marker on the milestone span only. aria-hidden:
+                the visual "50!" is decorative emphasis on the already-present
+                "50 discovered" count, so it shouldn't double up for a screen
+                reader (and the count line itself is visual-only — WordCombo's
+                status region owns the announcement). */}
+            {bumpKeyRef.current > 0 && milestoneRef.current ? (
+              <span className="discovery-milestone-marker" aria-hidden="true">
+                {" "}
+                {discoveredCount}!
+              </span>
+            ) : null}
           </span>
+          {/* Grid navigation aids: live substring filter + render-order control.
+              Sits below the discovery line in the sticky topbar so they're always
+              reachable while scrolling a large collection. Both are client-only —
+              no game/reducer state. */}
+          <div className="grid-controls">
+            <input
+              type="search"
+              className="grid-filter"
+              value={filter}
+              onInput={(e) => setFilter(e.currentTarget.value)}
+              placeholder="Filter…"
+              aria-label="Filter crafted words"
+            />
+            <button
+              type="button"
+              className="sort-toggle"
+              onClick={() =>
+                setSortMode((m) => (m === "newest" ? "alpha" : "newest"))
+              }
+              aria-label={
+                sortMode === "newest"
+                  ? "Sort order: newest first. Click to sort A to Z."
+                  : "Sort order: A to Z. Click to sort newest first."
+              }
+              title={sortMode === "newest" ? "Newest first" : "A–Z"}
+            >
+              {sortMode === "newest" ? "newest" : "A–Z"}
+            </button>
+          </div>
         </div>
         {showHint ? (
           <div className="onboarding-hint" role="note">
@@ -124,6 +217,8 @@ function App() {
           onClickWord={clickWord}
           words={gameState.words}
           queueEmpty={gameState.wordsQueue.length === 0}
+          filter={filter}
+          sortMode={sortMode}
         />
       </div>
       <ResetButton confirmReset={gameState.confirmReset} resetWords={resetWords} />
