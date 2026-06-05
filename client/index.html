@@ -13,6 +13,10 @@
     <link rel="manifest" href="/manifest.json" />
 
     <title>EndLLMless</title>
+    <script>
+      // Apply a saved theme before first paint to avoid a flash of the wrong theme (FOUC).
+      try { var t = localStorage.getItem('theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
