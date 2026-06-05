@@ -3,9 +3,15 @@ import { SelectedWord } from "./SelectedWord";
 import { Spinner } from "./Spinner";
 import "./WordCombo.css";
 
+// Floor the spinner to a short minimum so a genuine LLM call still reads as
+// "thinking" while a server cache hit (~5ms) snaps almost immediately. Kept
+// just long enough that the spinner never flickers sub-frame; the Promise.all
+// race below is what guarantees we wait out this floor before resolving.
+const MIN_SPINNER_MS = 300;
+
 const wordCombineApi = async (firstWord, secondWord) => {
     const requestTask = fetch(`/api/wordcombine?wordone=${encodeURIComponent(firstWord)}&wordtwo=${encodeURIComponent(secondWord)}`);
-    const response = (await Promise.all([requestTask, new Promise(r => setTimeout(r, 2000))]))[0];
+    const response = (await Promise.all([requestTask, new Promise(r => setTimeout(r, MIN_SPINNER_MS))]))[0];
     // fetch only rejects on network failure, not on HTTP 4xx/5xx, so a server
     // error returns a valid JSON error body. Throw on it so the caller's catch
     // runs loadingError() instead of dispatching newWord(undefined, undefined).
