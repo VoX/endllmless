@@ -17,11 +17,25 @@
   /* Surfaces */
   --bg: #142d4c;
   /* Ambient top glow color for the body backdrop (see the body rule below). A
-     slightly lifted navy over --bg. Alpha is baked into the token so the
-     gradient can fade it straight into `transparent`. Kept faint enough that
-     --text (#ececec) and --text-muted (#9bb0c4) still clear WCAG AA over the
-     brightest blend point (#1a3a60 → ~9.8:1 / ~5.2:1). */
+     slightly lifted navy over --bg. Kept faint enough that --text (#ececec) and
+     --text-muted (#9bb0c4) still clear WCAG AA over the brightest blend point
+     (#1a3a60 → ~9.8:1 / ~5.2:1). Paired with --bg-glow-0 (the same color at zero
+     alpha) so the gradient fades cleanly: fading to bare `transparent`
+     (= transparent-BLACK) would drag the stop's RGB toward 0 in straight-alpha
+     sRGB interpolation and tint the fade. */
   --bg-glow: rgba(31, 68, 112, 0.55);
+  --bg-glow-0: rgba(31, 68, 112, 0);
+  /* Darkening color for the dark-only edge vignette (see the dark body rule).
+     Tokenized to match the file's tokens-for-colors convention. */
+  --bg-vignette: rgba(0, 0, 0, 0.18);
+  /* Full dark backdrop layer stack: edge vignette over the top glow over --bg.
+     Defined once here (and mirrored on :root[data-theme="dark"]) so both dark
+     palette-resolution paths share a single declaration and can't drift. The
+     glow fades to --bg-glow-0 (its own zero-alpha twin); the vignette fades to
+     bare `transparent`, which is fine here because it interpolates
+     transparent-black -> rgba(0,0,0,0.18) — both already dark. */
+  --bg-layers: radial-gradient(ellipse at center, transparent 55%, var(--bg-vignette)),
+    radial-gradient(ellipse at top, var(--bg-glow), var(--bg-glow-0) 60%), var(--bg);
   --surface: #1b3a5f;
   --tile-bg: #9fd3c7;
   --tile-hover: #b9e3d9;
@@ -72,8 +86,12 @@
      light --bg is already near-white, a darker tint here would pull the bg down
      and break the marginal --text-muted contrast (it's only ~4.57:1 on bare
      --bg); lifting toward white instead nudges muted up to ~4.73:1 at the
-     brightest point, keeping AA intact. */
+     brightest point, keeping AA intact. --bg-glow-0 is the same near-white at
+     zero alpha so the gradient fades to a transparent version of THIS color
+     rather than bare `transparent` (transparent-black), which would otherwise
+     drag the fade through a dingy mid-gray over the near-white bg. */
   --bg-glow: rgba(242, 247, 251, 0.9);
+  --bg-glow-0: rgba(242, 247, 251, 0);
   --surface: #ffffff;
   --tile-bg: #9fd3c7;
   --tile-hover: #b9e3d9;
@@ -115,10 +133,12 @@
 @media (prefers-color-scheme: light) {
   :root:not([data-theme]) {
     --bg: #eef3f8;
-    /* Matches [data-theme="light"] --bg-glow (token-sync discipline): a barely
-       -cool near-white slightly lighter than --bg so the glow lifts toward
-       white and keeps the marginal muted-text contrast AA-clear. */
+    /* Matches [data-theme="light"] --bg-glow/--bg-glow-0 (token-sync
+       discipline): a barely-cool near-white slightly lighter than --bg so the
+       glow lifts toward white and keeps the marginal muted-text contrast
+       AA-clear, plus its zero-alpha twin so the gradient fades cleanly. */
     --bg-glow: rgba(242, 247, 251, 0.9);
+    --bg-glow-0: rgba(242, 247, 251, 0);
     --surface: #ffffff;
     --tile-hover: #b9e3d9;
     --tile-hover-text: #142d4c;
@@ -141,9 +161,15 @@
 /* Explicit dark override (beats the OS-light media query above). */
 :root[data-theme="dark"] {
   --bg: #142d4c;
-  /* Matches the default dark :root --bg-glow (token-sync discipline): faint
-     lifted navy whose brightest blend over --bg keeps --text/--text-muted AA. */
+  /* Matches the default dark :root --bg-glow/--bg-glow-0 (token-sync
+     discipline): faint lifted navy whose brightest blend over --bg keeps
+     --text/--text-muted AA, plus its zero-alpha twin for a clean gradient fade. */
   --bg-glow: rgba(31, 68, 112, 0.55);
+  --bg-glow-0: rgba(31, 68, 112, 0);
+  --bg-vignette: rgba(0, 0, 0, 0.18);
+  /* Mirrors the default dark :root --bg-layers (token-sync discipline). */
+  --bg-layers: radial-gradient(ellipse at center, transparent 55%, var(--bg-vignette)),
+    radial-gradient(ellipse at top, var(--bg-glow), var(--bg-glow-0) 60%), var(--bg);
   --surface: #1b3a5f;
   --tile-hover: #b9e3d9;
   --tile-hover-text: #142d4c;
@@ -169,13 +195,18 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* Ambient themed backdrop: a soft radial glow centered at the top (behind the
-     sticky .topbar/title) fading into --bg by 60% of the viewport, layered over
-     the flat page color. Driven entirely off the theme-aware --bg-glow token so
-     it tracks the palette. `background-attachment: fixed` anchors it to the
-     viewport so it stays put while the grid scrolls under the sticky topbar.
-     Static gradient, so no prefers-reduced-motion concern. */
-  background: radial-gradient(ellipse at top, var(--bg-glow), transparent 60%),
+  /* Ambient themed backdrop: a soft radial glow centered at the top, fading to
+     --bg-glow-0 (the glow color at zero alpha) by 60% of the viewport, layered
+     over the flat page color. Fading to the glow's own zero-alpha twin avoids
+     the transparent-black gotcha (bare `transparent` would tint the fade in
+     straight-alpha sRGB). The opaque sticky .topbar paints its own --bg over the
+     top-center band, so the glow mostly reads below the topbar and in the gutters
+     beside it on wide viewports rather than literally behind the title. Driven
+     off the theme-aware --bg-glow/--bg-glow-0 tokens so it tracks the palette.
+     `background-attachment: fixed` anchors it to the viewport (iOS Safari and
+     some Android browsers fall back to `scroll`, which is visually negligible for
+     a faint static glow). Static gradient, so no prefers-reduced-motion concern. */
+  background: radial-gradient(ellipse at top, var(--bg-glow), var(--bg-glow-0) 60%),
     var(--bg);
   background-attachment: fixed;
   color: var(--text);
@@ -184,21 +215,14 @@ body {
 
 /* Dark-only edge vignette: a second, very soft radial layer that darkens the
    viewport corners for depth, stacked under the same top glow. Scoped to the
-   dark palette ONLY because a darkening vignette over the near-white light --bg
-   would pull --text-muted (~4.57:1 on bare light --bg) below WCAG AA at the
-   edges; the dark palette has ample headroom (muted ~6.2:1) so darkening only
-   raises contrast there. The shared declaration is reused via a custom property
-   so the two palette-resolution paths (explicit toggle + OS default) stay in
-   sync, mirroring how the OS-default light case is gated by prefers-color-scheme
-   elsewhere in this file. Re-declares background-attachment so fixed anchoring
-   is preserved alongside the layered backgrounds. */
+   dark palette ONLY because a darkening wash over the near-white light --bg just
+   looks muddy. The full layer stack lives in the --bg-vignette/--bg-layers
+   custom properties (defined on both dark :root selectors), so the two
+   palette-resolution paths (explicit toggle + OS default) reference one shared
+   declaration and can't drift. Re-declares background-attachment so fixed
+   anchoring is preserved alongside the layered backgrounds. */
 :root[data-theme="dark"] body {
-  background: radial-gradient(
-      ellipse at center,
-      transparent 55%,
-      rgba(0, 0, 0, 0.18)
-    ),
-    radial-gradient(ellipse at top, var(--bg-glow), transparent 60%), var(--bg);
+  background: var(--bg-layers);
   background-attachment: fixed;
 }
 
@@ -207,13 +231,7 @@ body {
    above — is left with the glow only. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) body {
-    background: radial-gradient(
-        ellipse at center,
-        transparent 55%,
-        rgba(0, 0, 0, 0.18)
-      ),
-      radial-gradient(ellipse at top, var(--bg-glow), transparent 60%),
-      var(--bg);
+    background: var(--bg-layers);
     background-attachment: fixed;
   }
 }
