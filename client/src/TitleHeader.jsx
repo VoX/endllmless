@@ -16,12 +16,28 @@ export const TitleHeader = () => {
     // re-subscribing the interval (the effect stays mount-only, preserving the
     // existing randomized-interval fetch behavior).
     const titleWordRef = useRef(titleWord);
+    // The first fetch seeds the initial title (the "Endless" placeholder is just
+    // a pre-fetch stand-in), so swap it in WITHOUT a crossfade — otherwise every
+    // page load plays an unsolicited fade, and only when the placeholder casing
+    // happens to differ from the server's first title ("Endless" vs "ENDLESS").
+    // Subsequent polls animate normally.
+    const hasFetchedRef = useRef(false);
 
     useEffect(() => {
         const swapTitle = (next) => {
-            // Only crossfade on an actual change; identical titles are a no-op so
-            // we don't replay the animation or stack a duplicate word.
+            // Identical titles are a no-op so we don't replay the animation or
+            // stack a duplicate word. Still mark the first fetch as done so a
+            // first title that happens to equal the placeholder doesn't leave the
+            // "seed silently" flag armed and swallow the next real change's fade.
             if (!next || next === titleWordRef.current) {
+                hasFetchedRef.current = true;
+                return;
+            }
+            // Seed the very first title silently (no outgoing word, no fade).
+            if (!hasFetchedRef.current) {
+                hasFetchedRef.current = true;
+                titleWordRef.current = next;
+                setTitleWord(next);
                 return;
             }
             setPrevWord(titleWordRef.current);

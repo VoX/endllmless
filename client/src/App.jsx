@@ -68,10 +68,14 @@ function App() {
         <div className="topbar">
           <TitleHeader />
           <WordCombo wordState={gameState.wordState} words={gameState.words} loadingWord={loadingWord} newWord={newWord} loadingError={loadingError} />
-          {/* Quiet running total of discoveries. Keyed on the count so the
-              subtle bump animation (App.css) replays on each new word; the
-              keyframe is suppressed under prefers-reduced-motion there. */}
-          <span key={discoveredCount} className="discovery-count" role="status" aria-live="polite">
+          {/* Quiet running total of discoveries. Visual-only (no live region):
+              WordCombo's combo-result region already announces the discovery
+              sentence in the same render commit, so a polite live region here
+              would double the screen-reader chatter on every new word. Keyed on
+              the count so the subtle bump animation (App.css) still replays on
+              each new word; that keyframe is suppressed under
+              prefers-reduced-motion there. */}
+          <span key={discoveredCount} className="discovery-count">
             {discoveredCount} discovered
           </span>
         </div>
