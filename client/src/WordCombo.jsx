@@ -23,9 +23,10 @@ const wordCombineApi = async (firstWord, secondWord) => {
     return wordRes;
 };
 
-// Map a thrown error to the error kind stored in wordState. A network failure
-// (fetch rejected, no .status) or any 5xx is a generic "try again"; 429 is its
-// own throttle message.
+// Map a thrown error to the error kind stored in wordState. 429 gets its own
+// throttle message; everything else (network failure with no .status, other
+// HTTP errors, or a malformed-success body) falls through to a generic
+// "try again".
 const errorKind = (error) => (error && error.status === 429 ? 'rate_limited' : 'generic');
 
 export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError }) => {

@@ -1,5 +1,5 @@
 import "./App.css";
-import { useEffect, useReducer, useRef, useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 import { GameButtonsContainer } from "./GameButton";
 import { TitleHeader } from "./TitleHeader";
 import { gameReducer, initialGameState, initializeState } from "./gameReducer";
@@ -9,7 +9,6 @@ import { ResetButton } from "./ResetButton";
 function App() {
   const [gameState, dispatch] = useReducer(gameReducer, initialGameState, initializeState);
   const [hintDismissed, setHintDismissed] = useState(false);
-  const resetTimer = useRef(null);
 
   // Show the onboarding hint until the player has discovered more than the 5
   // default words, or until they dismiss it manually.
@@ -22,13 +21,10 @@ function App() {
     if (!gameState.confirmReset) {
       return;
     }
-    resetTimer.current = setTimeout(() => {
+    const id = setTimeout(() => {
       dispatch({ type: 'cancel_reset' });
     }, 3000);
-    return () => {
-      clearTimeout(resetTimer.current);
-      resetTimer.current = null;
-    };
+    return () => clearTimeout(id);
   }, [gameState.confirmReset]);
 
   function resetWords() {
