@@ -69,14 +69,30 @@ export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError
                 ""
             )}
             <div className="combo-result" role="status" aria-live="polite" aria-atomic="true">
-                {wordState.new ? (
-                    <SelectedWord
-                        word={wordState.new}
-                        emoji={words[wordState.new]}
-                        isFirstFound={wordState.isFirstFound}
-                    />
-                ) : wordState.loading ? (
-                    <Spinner />
+                {/* Visible result is hidden from the live region so the screen
+                    reader announces the self-contained sentence below instead of
+                    the bare result word (which would otherwise double up). */}
+                <span aria-hidden="true">
+                    {wordState.new ? (
+                        <SelectedWord
+                            word={wordState.new}
+                            emoji={words[wordState.new]}
+                            isFirstFound={wordState.isFirstFound}
+                        />
+                    ) : wordState.loading ? (
+                        <Spinner />
+                    ) : (
+                        ""
+                    )}
+                </span>
+                {wordState.first && wordState.second && wordState.new ? (
+                    <span className="visually-hidden">
+                        {`${wordState.first} plus ${wordState.second} equals ${wordState.new}`}
+                    </span>
+                ) : wordState.first && wordState.second && wordState.loading ? (
+                    <span className="visually-hidden">
+                        {`combining ${wordState.first} and ${wordState.second}`}
+                    </span>
                 ) : (
                     ""
                 )}

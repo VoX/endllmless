@@ -32,6 +32,13 @@ export const ThemeToggle = () => {
     } catch {
       // Ignore persistence failures (private mode, quota, etc.).
     }
+    // Keep the browser/PWA chrome (mobile address bar, splash) in sync with the
+    // explicit choice. The media-scoped <meta> tags only track the OS pref, so
+    // point every theme-color tag at the chosen palette's --bg.
+    const chrome = theme === "dark" ? "#142d4c" : "#eef3f8";
+    document
+      .querySelectorAll('meta[name="theme-color"]')
+      .forEach((m) => m.setAttribute("content", chrome));
   }, [theme]);
 
   const isDark = theme === "dark";

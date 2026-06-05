@@ -39,11 +39,17 @@
 .game-button:hover {
   background-color: var(--tile-hover);
   color: var(--tile-hover-text);
-  transform: translateY(-2px);
   box-shadow: 0 6px 14px rgba(0, 0, 0, 0.4);
 }
 
-.game-button:active {
+/* The lift is a transform, which can't compose with the tada `scale` keyframe
+   on the same element — scope it out while tada runs so the pop isn't cut short.
+   Color/shadow hover feedback above still applies during the animation. */
+.game-button:not(.tada):hover {
+  transform: translateY(-2px);
+}
+
+.game-button:not(.tada):active {
   transform: translateY(0);
   box-shadow: var(--shadow);
 }

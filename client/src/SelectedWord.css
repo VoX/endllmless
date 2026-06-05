@@ -10,6 +10,8 @@ span.word {
 span.firstWord {
   /* Needed for transform */
   animation: tada 1s ease 1;
-  color: var(--accent);
+  /* Use the text-safe accent so the "found something new" word stays
+     readable in light mode (the bare --accent is ~2.3:1 on the light bg). */
+  color: var(--accent-text);
   /* Adjust time and easing as needed */
 }
