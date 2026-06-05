@@ -26,7 +26,10 @@
   padding: var(--space-2) var(--space-3);
   background-color: var(--tile-bg);
   color: var(--tile-text);
-  border: 1px solid rgba(0, 0, 0, 0.12);
+  /* Theme-aware border instead of a hardcoded near-black rgba, which left a
+     faint black outline on every tile in light mode that didn't match the
+     softer light palette. */
+  border: 1px solid var(--shadow-color);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   text-transform: capitalize;
@@ -35,11 +38,13 @@
     background-color 0.12s ease;
 }
 
-/* Tasteful hover lift replacing the white/purple flip */
+/* Tasteful hover lift replacing the white/purple flip. The lift cue comes from
+   the translateY transform below; the shadow stays on the theme token so it
+   tracks the light/dark palette instead of a hardcoded near-black rgba. */
 .game-button:hover {
   background-color: var(--tile-hover);
   color: var(--tile-hover-text);
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow);
 }
 
 /* The lift is a transform, which can't compose with the tada `scale` keyframe

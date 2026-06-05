@@ -24,9 +24,17 @@ export const initialGameState = {
 };
 
 export const initializeState = (initialValue) => {
-    const wordsInStorage = localStorage.getItem("words");
-    if (wordsInStorage) {
-        initialValue.words = JSON.parse(wordsInStorage);
+    // Guard against corrupted/non-JSON persisted state (browser glitch, another
+    // script on the origin, manual tampering, partial write). A throw here would
+    // crash reducer init and blank the whole app with no recovery, so fall back
+    // to the defaults and only adopt the stored value when it's a plain object.
+    try {
+        const stored = JSON.parse(localStorage.getItem("words"));
+        if (stored && typeof stored === "object" && !Array.isArray(stored)) {
+            initialValue.words = stored;
+        }
+    } catch {
+        // Keep defaultWords; nothing to adopt.
     }
     return initialValue;
 };
@@ -94,25 +102,28 @@ function innerGameReducer(state, action) {
                     foundDelay: true,
                     loading: false,
                     new: action.word,
+                    // Clear any prior error so a successful discovery never renders
+                    // alongside a stale failure message. Defensive: the only path
+                    // that reaches new_word today comes through a cleared error, but
+                    // don't depend on that invariant holding elsewhere.
+                    error: "",
                     isFirstFound: !Object.keys(state.words).includes(action.word)
                 },
                 words: { ...state.words, ...{ [action.word]: action.emoji } },
             };
         }
         case 'loading_error': {
-            // Preserve the selected pair (first/second) so the user can retry the
-            // same combination; clear loading and surface the failure kind. The
-            // WordCombo effect must NOT auto-retry while error is set, otherwise
-            // this would loop (first+second are still present here).
+            // Clear the selected pair (so the next tile click starts a fresh
+            // selection rather than silently combining the stale `first` with it)
+            // and surface the failure kind via `error`. There is no retry
+            // affordance in the UI, so retaining first/second only created a trap;
+            // the user re-selects from scratch. Also drop any queued combinations:
+            // an error aborts the whole queued batch instead of letting orphaned
+            // pairs resurface on a later found_delay.
             return {
                 ...state,
-                wordState: {
-                    ...state.wordState,
-                    loading: false,
-                    foundDelay: false,
-                    new: "",
-                    error: action.kind || 'generic'
-                }
+                wordsQueue: [],
+                wordState: { ...defaultWordState, error: action.kind || 'generic' }
             };
         }
         case 'found_delay': {

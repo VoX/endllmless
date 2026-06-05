@@ -51,7 +51,6 @@ export const ThemeToggle = () => {
       onClick={() => setTheme(next)}
       aria-label={`Switch to ${next} theme`}
       title={`Switch to ${next} theme`}
-      aria-pressed={!isDark}
     >
       <span aria-hidden="true">{isDark ? "☀" : "☾"}</span>
     </button>

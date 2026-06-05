@@ -17,6 +17,13 @@ const debug = debugLib('endllmless-server:server');
 var port = normalizePort(process.env.PORT || '8080');
 app.set('port', port);
 
+// Bind to loopback by default so only the same-host reverse proxy (Caddy) can
+// reach the app. The per-IP rate limiter keys off the proxy-supplied
+// X-Forwarded-For (trust proxy:1); if the port were reachable directly an
+// attacker could rotate a spoofed XFF per request to defeat it and drain the
+// paid OpenRouter budget. Override HOST only for an intentionally public bind.
+var host = process.env.HOST || '127.0.0.1';
+
 /**
  * Create HTTP server.
  */
@@ -24,10 +31,10 @@ app.set('port', port);
 var server = http.createServer(app);
 
 /**
- * Listen on provided port, on all network interfaces.
+ * Listen on the provided port, bound to `host` (loopback by default).
  */
 
-server.listen(port);
+server.listen(port, host);
 server.on('error', onError);
 server.on('listening', onListening);
 

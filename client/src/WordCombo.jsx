@@ -31,10 +31,10 @@ const errorKind = (error) => (error && error.status === 429 ? 'rate_limited' : '
 
 export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError }) => {
     useEffect(() => {
-        // The extra !wordState.error guard stops an auto-retry loop: loading_error
-        // intentionally keeps first/second so the user can retry, which would
-        // otherwise re-satisfy this condition immediately. Clearing error happens
-        // on the next click_word.
+        // loading_error clears first/second, so the first+second check below is
+        // already false after a failure. The extra !wordState.error guard is
+        // belt-and-suspenders: it ensures the request never auto-fires while an
+        // error is being shown, regardless of how the pair got set.
         if (!wordState.loading && !wordState.foundDelay && !wordState.new && !wordState.error && wordState.first && wordState.second) {
             async function makeTheRequest() {
                 try {
@@ -108,7 +108,10 @@ export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError
                 </span>
                 {wordState.first && wordState.second && wordState.new ? (
                     <span className="visually-hidden">
-                        {`${wordState.first} plus ${wordState.second} equals ${wordState.new}`}
+                        {/* Fold the new-vs-rediscovered distinction (shown visually
+                            by the aria-hidden badge) into the announced sentence so
+                            screen-reader users get the same signal. */}
+                        {`${wordState.first} plus ${wordState.second} equals ${wordState.new}${wordState.isFirstFound ? ", a new discovery" : ", already discovered"}`}
                     </span>
                 ) : wordState.first && wordState.second && wordState.loading ? (
                     <span className="visually-hidden">

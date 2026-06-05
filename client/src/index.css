@@ -65,8 +65,10 @@
   /* Higher-contrast blue for the keyboard focus ring in light mode (the
      low-chroma gold accent only reaches ~2.3:1 on the light surfaces). */
   --focus: #0b5cab;
-  /* Darkened accent for text so the firstWord highlight clears 4.5:1. */
-  --accent-text: #8a6d00;
+  /* Darkened accent for text so accent-colored text (firstWord highlight, the
+     small "New!" result badge) clears 4.5:1 on the light bg even at small bold
+     sizes. #8a6d00 is ~4.41:1 (just under AA for small text); #7a5f00 is ~5.4:1. */
+  --accent-text: #7a5f00;
 
   --text: #1b3a5f;
   --text-muted: #5b7088;
@@ -95,7 +97,7 @@
     --tile-text: #142d4c;
     --accent: #c79a00;
     --focus: #0b5cab;
-    --accent-text: #8a6d00;
+    --accent-text: #7a5f00;
     --text: #1b3a5f;
     --text-muted: #5b7088;
     --danger: #c0392b;

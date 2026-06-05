@@ -34,7 +34,10 @@
 }
 
 .result-badge-new {
-  color: var(--accent);
+  /* Use the text-safe accent (same token as the firstWord highlight) so this
+     small bold badge clears WCAG AA in light mode; the bare --accent is only
+     ~2.3:1 on the light bg. Driving both off one token keeps them from drifting. */
+  color: var(--accent-text);
 }
 
 .result-badge-discovered {

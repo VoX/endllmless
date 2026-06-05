@@ -64,7 +64,10 @@ router.get('/', async (req, res, next) => {
             currentIndex = 0;
             lastFetchTime = Date.now();
         } catch (error) {
-            console.error("Error generating titles:", error);
+            // Log only safe fields: this catch also wraps the OpenAI SDK call,
+            // whose APIError carries the upstream RESPONSE headers as an
+            // enumerable property that util.inspect would otherwise dump verbatim.
+            console.error("Error generating titles:", error?.status, error?.message, error?.requestID);
             return res.json({ title: "ENDLESS" });
         }
     }

@@ -41,6 +41,13 @@ describe('gameReducer: new_word / isFirstFound', () => {
     // Re-merging keeps the existing emoji slot (overwritten with the same value).
     expect(next.words.water).toBe('');
   });
+
+  it('clears any stale error so a success never renders next to a failure message', () => {
+    const state = pairState({ error: 'generic' });
+    const next = gameReducer(state, { type: 'new_word', word: 'steam', emoji: '' });
+    expect(next.wordState.error).toBe('');
+    expect(next.wordState.new).toBe('steam');
+  });
 });
 
 describe('gameReducer: click_word', () => {
@@ -130,12 +137,15 @@ describe('gameReducer: reset_words + cancel_reset', () => {
 });
 
 describe('gameReducer: loading_error', () => {
-  it('preserves the selected pair so the user can retry, and surfaces the kind', () => {
+  it('clears the selected pair (so the next click starts fresh) and surfaces the kind', () => {
     const state = pairState();
     const next = gameReducer(state, { type: 'loading_error', kind: 'rate_limited' });
 
-    expect(next.wordState.first).toBe('fire');
-    expect(next.wordState.second).toBe('water');
+    // The pair is reset rather than preserved: there is no retry affordance, so
+    // keeping first/second would let the next tile click silently combine the
+    // stale first with whatever the user taps.
+    expect(next.wordState.first).toBe('');
+    expect(next.wordState.second).toBe('');
     expect(next.wordState.loading).toBe(false);
     expect(next.wordState.foundDelay).toBe(false);
     expect(next.wordState.new).toBe('');
@@ -145,8 +155,17 @@ describe('gameReducer: loading_error', () => {
   it('defaults the error kind to "generic" when none is provided', () => {
     const next = gameReducer(pairState(), { type: 'loading_error' });
     expect(next.wordState.error).toBe('generic');
-    // Pair still preserved.
-    expect(next.wordState.first).toBe('fire');
-    expect(next.wordState.second).toBe('water');
+    // Pair cleared.
+    expect(next.wordState.first).toBe('');
+    expect(next.wordState.second).toBe('');
+  });
+
+  it('drops any queued combinations so an error aborts the whole batch', () => {
+    const queued = {
+      ...pairState(),
+      wordsQueue: [{ first: 'earth', second: 'wind' }],
+    };
+    const next = gameReducer(queued, { type: 'loading_error', kind: 'generic' });
+    expect(next.wordsQueue).toEqual([]);
   });
 });

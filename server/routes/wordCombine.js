@@ -132,7 +132,11 @@ router.get('/', async (req, res, next) => {
     }
     });
   } catch (error) {
-    console.error("Error combining words:", error);
+    // Log only the safe diagnostic fields. The OpenAI SDK's APIError carries the
+    // upstream RESPONSE headers as an enumerable property, which util.inspect
+    // would dump verbatim (rate-limit counters, account/org hints, etc.) on every
+    // failure; status + message + requestID keep the support signal without it.
+    console.error("Error combining words:", error?.status, error?.message, error?.requestID);
     return res.status(502).json({ error: 'combination_failed' });
   }
 
@@ -148,7 +152,10 @@ router.get('/', async (req, res, next) => {
       throw new Error('missing newWord');
     }
   } catch (error) {
-    console.error("Bad completion from model:", error);
+    // This path catches validation/JSON.parse of an otherwise-successful
+    // completion (a plain Error, no SDK response headers), but log just the
+    // message for consistency with the SDK-error path above.
+    console.error("Bad completion from model:", error?.message);
     return res.status(502).json({ error: 'combination_failed' });
   }
 
