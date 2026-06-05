@@ -300,10 +300,10 @@ button:hover {
     animation: none !important;
   }
 
-  /* Drop the translateY hover/active lift but keep the color/shadow change from
-     the base :hover rule so tiles still signal interactivity. */
-  .game-button:not(.tada):hover,
-  .game-button:not(.tada):active {
+  /* Drop the translateY hover lift but keep the color/shadow change from the
+     base :hover rule so tiles still signal interactivity. (The :active state is
+     already flat — its base rule is translateY(0) — so it needs no override.) */
+  .game-button:not(.tada):hover {
     transform: none !important;
   }
 
