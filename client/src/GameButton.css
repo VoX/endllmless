@@ -24,6 +24,15 @@
   min-height: 104px;
   min-width: 64px;
   padding: var(--space-2) var(--space-3);
+  /* Anchor for the base-tile accent stripe (an absolutely-positioned ::before),
+     so it can hug the left edge without touching the flex layout of the label/
+     emoji or shifting any other tile. */
+  position: relative;
+  /* Leave clearance below the sticky, z-indexed topbar (App.css .topbar) when a
+     freshly crafted tile is scrolled into view, so it never lands flush behind
+     the bar. The page scrolls on the window (no inner scroll container), so
+     scrollIntoView honors this margin against the viewport top. */
+  scroll-margin-top: var(--space-4);
   background-color: var(--tile-bg);
   color: var(--tile-text);
   /* Theme-aware border instead of a hardcoded near-black rgba, which left a
@@ -92,6 +101,65 @@
 .game-button:not(.selected):not(.fade-out) {
   transition: transform 0.12s ease, box-shadow 0.12s ease,
     background-color 0.12s ease;
+}
+
+/* ---- Base-tile tier ----
+   The five primordial elements (earth/fire/life/water/wind) get a left-edge
+   accent stripe so the foundational set reads as distinct from crafted words.
+   Implemented as an absolutely-positioned pseudo-element rather than a border so
+   it (a) never shifts the grid layout and (b) is fully independent of the
+   background/box-shadow/transform changes used by selected/fade-out/tada — it
+   can't fight any of those states.
+   Color: a fixed deep amber (#7a5f00, ~3.8:1 over the teal --tile-bg) at full
+   opacity, NOT the theme --accent. The tile fill is the same teal in both
+   themes, so a single fixed color reads in both; the previous 0.55-opacity
+   --accent composited to ~1.1-1.3:1 over the teal and was effectively invisible
+   (below WCAG 1.4.11's 3:1 non-text minimum). Widened to 4px and made solid so
+   the foundational-tier marker is actually perceivable. */
+.game-button.base-tile::before {
+  content: "";
+  position: absolute;
+  top: var(--space-2);
+  bottom: var(--space-2);
+  left: 0;
+  width: 4px;
+  background: #7a5f00;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  pointer-events: none;
+}
+
+/* ---- Persistent new ring ----
+   A thin static accent ring on the most recently crafted tile so a brand-new
+   word doesn't instantly blend back in. It runs alongside the 1s tada for the
+   first ~1s (tada animates transform:scale, this sets box-shadow — different
+   properties, so they compose cleanly) and then persists after the tada ends,
+   until the next selection clears it. Layers: the theme --shadow, a 2px
+   --new-ring, a soft --shadow-color glow, and an inset --shadow-color hairline
+   that keeps the ring crisp against the tile fill (the glow + hairline use
+   --shadow-color, not --new-ring — only the 2px ring is accent-colored).
+   --new-ring is a theme-aware token (bright gold in dark, deep gold #7a5f00 in
+   light) so the ring clears the 3:1 non-text-contrast minimum in BOTH themes —
+   the bare bright --accent was nearly invisible (~1.6:1) over the teal tile in
+   light mode. Static by construction, so it's reduced-motion-safe with no extra
+   guard. The JSX suppresses .is-new while a tile is selected/fading, so this
+   never stacks with those backgrounds. Re-asserted on :hover because the base
+   :hover rule resets box-shadow to var(--shadow), which would otherwise drop the
+   ring. */
+.game-button.is-new,
+.game-button.is-new:hover {
+  box-shadow: var(--shadow), 0 0 0 2px var(--new-ring),
+    0 0 8px var(--shadow-color), inset 0 0 0 1px var(--shadow-color);
+}
+
+/* Keep keyboard focus unambiguous on a freshly crafted (is-new) tile. In dark
+   theme --focus and --new-ring are both gold, so the 2px is-new box-shadow ring
+   and the focus outline would otherwise merge into one indistinct gold band and
+   a keyboard user couldn't tell "focused" from "new". Pushing the focus outline
+   further out (offset 5px > the 2px ring) opens a clear bg gap between the two,
+   so they read as two separate rings even when they share a hue. Theme-agnostic:
+   harmless in light (where --focus is already a contrasting blue). */
+.game-button.is-new:focus-visible {
+  outline-offset: 5px;
 }
 
 @media (min-width: 720px) {

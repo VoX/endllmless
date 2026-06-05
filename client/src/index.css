@@ -29,6 +29,12 @@
   /* Accent used as body text (e.g. the firstWord highlight). Needs 4.5:1 on
      --bg/--surface; the light theme darkens it since #c79a00 only hits ~2.3:1. */
   --accent-text: #ffd700;
+  /* Color of the 2px "newest discovery" ring on a freshly crafted tile. A
+     non-text UI affordance, so it needs WCAG 1.4.11's 3:1 minimum against both
+     the teal tile fill and the page bg. Gold clears that comfortably on the dark
+     navy bg (~9.9:1 on the outer edge); the light theme darkens it because the
+     low-chroma gold --accent (#c79a00) only reaches ~1.6-2.3:1 there. */
+  --new-ring: #ffd700;
 
   /* Text */
   --text: #ececec;
@@ -69,6 +75,11 @@
      small "New!" result badge) clears 4.5:1 on the light bg even at small bold
      sizes. #8a6d00 is ~4.41:1 (just under AA for small text); #7a5f00 is ~5.4:1. */
   --accent-text: #7a5f00;
+  /* Darkened "newest discovery" ring for light mode: the deep gold #7a5f00 is
+     ~5.4:1 on the light bg and ~3.5:1 on the teal tile fill, both clearing the
+     3:1 non-text minimum the bright gold --accent fails here. Matches
+     --accent-text so the readable-gold treatment stays consistent. */
+  --new-ring: #7a5f00;
 
   --text: #1b3a5f;
   --text-muted: #5b7088;
@@ -98,6 +109,7 @@
     --accent: #c79a00;
     --focus: #0b5cab;
     --accent-text: #7a5f00;
+    --new-ring: #7a5f00;
     --text: #1b3a5f;
     --text-muted: #5b7088;
     --danger: #c0392b;
@@ -119,6 +131,7 @@
   --accent: #ffd700;
   --focus: #ffd700;
   --accent-text: #ffd700;
+  --new-ring: #ffd700;
   --text: #ececec;
   --text-muted: #9bb0c4;
   --danger: #e5534b;
@@ -268,5 +281,48 @@ button:hover {
 
   100% {
     transform: scale(1);
+  }
+}
+
+/* Steady, non-rotating loading affordance for reduced-motion users: a gentle
+   opacity breathe so the spinner still reads as "working" without spinning. */
+@keyframes spinner-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* ---- Reduced motion ----
+   Single guard that neutralizes the app's motion-heavy effects when the OS
+   asks for reduced motion. !important is used deliberately: this block lives in
+   index.css, which is bundled BEFORE the component stylesheets (Spinner.css,
+   GameButton.css, SelectedWord.css), so without it these equal-specificity
+   selectors would lose the cascade to the later component rules. We strip the
+   scale-pop and vertical lifts but KEEP color/shadow feedback so tiles still
+   read as interactive, and swap the spinner's infinite rotation for a calm
+   opacity pulse so the loading cue survives. */
+@media (prefers-reduced-motion: reduce) {
+  /* Kill the scale-pop that fires on every combine (both reuse @keyframes tada). */
+  .game-button.tada,
+  span.firstWord {
+    animation: none !important;
+  }
+
+  /* Drop the translateY hover lift but keep the color/shadow change from the
+     base :hover rule so tiles still signal interactivity. (The :active state is
+     already flat — its base rule is translateY(0) — so it needs no override.) */
+  .game-button:not(.tada):hover {
+    transform: none !important;
+  }
+
+  /* Replace the infinite rotation with a steady opacity breathe so loading is
+     still visible without any rotating motion. */
+  .spinner {
+    animation: spinner-pulse 1.4s ease-in-out infinite !important;
   }
 }

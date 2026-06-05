@@ -52,6 +52,124 @@
   transform: translateY(-50%);
 }
 
+/* Crossfade target for the rotating title word. Only the inner word animates;
+   the surrounding "CRAFT … THINGS" stays static. The wrapper is inline so it
+   sits in the heading's text flow, and relatively positioned so the outgoing
+   copy can be absolutely stacked over the incoming one for a real crossfade. */
+.title-word-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.title-word {
+  display: inline-block;
+  /* Match the heading so the swapped word lines up exactly. */
+  color: inherit;
+}
+
+/* Incoming word: fades up into place. */
+.title-word-in {
+  animation: title-word-in 0.2s ease-out;
+}
+
+/* Outgoing word: stacked over the incoming one, fades + rises out, then is
+   removed from the DOM (onAnimationEnd in TitleHeader.jsx). Centered on the
+   wrapper (whose width tracks the incoming word), so when the two words differ
+   in length the outgoing copy is centered on the NEW word's box rather than its
+   own former position — at 0.2s the slight horizontal shift reads as part of the
+   dissolve. A true stay-in-place crossfade would need a fixed-width measured
+   container; not worth it at this duration. */
+.title-word-out {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+  animation: title-word-out 0.2s ease-in forwards;
+  pointer-events: none;
+}
+
+@keyframes title-word-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.2em);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes title-word-out {
+  from {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-0.2em);
+  }
+}
+
+/* Reduced-motion guard (consistent with index.css's foundation block and the
+   per-component blocks in Spinner.css): no fade at all. The incoming word swaps
+   instantly; the outgoing copy is hidden immediately, and its cleanup is handled
+   by the safety timer in TitleHeader.jsx since no animationend will fire. */
+@media (prefers-reduced-motion: reduce) {
+  .title-word-in {
+    animation: none;
+  }
+
+  .title-word-out {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+/* Quiet running discovery total, sat under the title/combo row in the topbar.
+   Block-level + centered so it reads as its own muted line and never crowds the
+   title or the theme toggle, even at narrow widths where the title wraps. */
+.discovery-count {
+  display: block;
+  margin-top: var(--space-2);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+/* Subtle "+1" cue, applied (in App.jsx) only when the total actually GROWS — the
+   span is remounted on a growth-only key, so this short bump replays once per new
+   discovery and never on first paint or a reset shrink. Guarded by
+   prefers-reduced-motion below — no unguarded motion. */
+.discovery-count.bump {
+  animation: discovery-bump 0.3s ease-out;
+}
+
+/* Tiny scale/opacity tick when the total ticks up. Kept minimal so it registers
+   in peripheral vision without pulling focus from the grid. */
+@keyframes discovery-bump {
+  0% {
+    transform: scale(1);
+  }
+
+  40% {
+    transform: scale(1.12);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Reduced-motion guard (mirrors the foundation track in index.css and the
+   per-component blocks in Spinner.css): the count still updates, just with no
+   bump animation. */
+@media (prefers-reduced-motion: reduce) {
+  .discovery-count.bump {
+    animation: none;
+  }
+}
+
 /* Dismissible onboarding hint: one line under the topbar, above the grid. */
 .onboarding-hint {
   display: flex;

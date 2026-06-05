@@ -3,9 +3,22 @@ import { SelectedWord } from "./SelectedWord";
 import { Spinner } from "./Spinner";
 import "./WordCombo.css";
 
+// Floor the spinner to a short minimum so a genuine LLM call still reads as
+// "thinking" while a server cache hit (near-instant — the lookup is synchronous
+// in-memory on the server) snaps quickly. Sized to the spinner's merge-flash
+// apex: the converging-dots animation (Spinner.css) and the reduced-motion
+// breathe (index.css) both peak at ~half their 1.1s / 1.4s cycle, so 550ms lets
+// the "two dots become one" payoff land at least once on a fast hit instead of
+// the dots vanishing before they meet — while still feeling far snappier than
+// the old 2s floor. The Promise.all race below guarantees we wait out this floor
+// before resolving on a success or HTTP error; a hard network rejection still
+// short-circuits it (Promise.all rejects immediately), so the spinner can flash
+// briefly on a true connection failure — acceptable, since that's the rare path.
+const MIN_SPINNER_MS = 550;
+
 const wordCombineApi = async (firstWord, secondWord) => {
     const requestTask = fetch(`/api/wordcombine?wordone=${encodeURIComponent(firstWord)}&wordtwo=${encodeURIComponent(secondWord)}`);
-    const response = (await Promise.all([requestTask, new Promise(r => setTimeout(r, 2000))]))[0];
+    const response = (await Promise.all([requestTask, new Promise(r => setTimeout(r, MIN_SPINNER_MS))]))[0];
     // fetch only rejects on network failure, not on HTTP 4xx/5xx, so a server
     // error returns a valid JSON error body. Throw on it so the caller's catch
     // runs loadingError() instead of dispatching newWord(undefined, undefined).
