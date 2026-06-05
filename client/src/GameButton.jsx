@@ -95,6 +95,19 @@ export const GameButtonsContainer = ({ onClickWord, words, queueEmpty, filter = 
   // word -> tile button element, so a freshly crafted tile (which appends at the
   // end of the flex-wrap grid, often below the fold) can be scrolled into view.
   const tileRefs = useRef(new Map());
+  // Pending entrance/tada setTimeout ids for the current new-tile sequence. The
+  // sequence schedules deferred setEnterWord(null)/setTadaWord(...) calls keyed
+  // to a SPECIFIC word; if that word vanishes first (a reset, or any word-set
+  // shrink) the shrink-cleanup branch clears these so they can't fire afterward
+  // and re-assign tada/enter to a now-gone tile (a stray tada could then land on
+  // that exact word if it's rediscovered within the ~1s window). Also cleared
+  // when a fresh sequence starts so back-to-back discoveries don't leak the prior
+  // timers.
+  const sequenceTimers = useRef([]);
+  const clearSequenceTimers = () => {
+    sequenceTimers.current.forEach(clearTimeout);
+    sequenceTimers.current = [];
+  };
 
   // Track new word for tada animation
   useEffect(() => {
@@ -115,9 +128,15 @@ export const GameButtonsContainer = ({ onClickWord, words, queueEmpty, filter = 
       // code path runs harmlessly.)
       setEnterWord(tadaTarget);
       setTadaWord(null);
-      setTimeout(() => setEnterWord(null), TILE_ENTER_MS);
-      setTimeout(() => setTadaWord(tadaTarget), TILE_ENTER_MS);
-      setTimeout(() => setTadaWord(null), TILE_ENTER_MS + 1000);
+      // Drop any timers still pending from a prior new-tile sequence before
+      // arming this one (rapid back-to-back discoveries), then track the new ids
+      // so the shrink-cleanup branch below can cancel them if tadaTarget vanishes.
+      clearSequenceTimers();
+      sequenceTimers.current.push(
+        setTimeout(() => setEnterWord(null), TILE_ENTER_MS),
+        setTimeout(() => setTadaWord(tadaTarget), TILE_ENTER_MS),
+        setTimeout(() => setTadaWord(null), TILE_ENTER_MS + 1000)
+      );
       // Persistent ring + scroll the reward into view. The tile is already in
       // the DOM (this effect runs after the render that added it), so its ref is
       // populated. Smooth scroll when motion is allowed; instant under reduce.
@@ -167,8 +186,12 @@ export const GameButtonsContainer = ({ onClickWord, words, queueEmpty, filter = 
     }
     // The word set shrank (reset back to the 5 defaults, or any future removal):
     // the new/tada/enter highlights point at a tile that no longer exists, so
-    // clear the transient state instead of letting it dangle as stale refs.
+    // clear the transient state instead of letting it dangle as stale refs. Also
+    // cancel any pending entrance/tada timers — otherwise they'd fire after the
+    // word is gone and re-assign tada/enter to the deleted target (and could
+    // stray onto it if rediscovered within the ~1s window).
     if (currentWords.length < prevWords.current.length) {
+      clearSequenceTimers();
       setNewWord(null);
       setTadaWord(null);
       setEnterWord(null);
@@ -207,14 +230,16 @@ export const GameButtonsContainer = ({ onClickWord, words, queueEmpty, filter = 
   // blank grid so the player knows the filter is the reason, not a load failure.
   // (Only reachable when there's a non-empty query — an empty query matches all,
   // and the grid always has the 5 base words.)
+  //
+  // No role="list" here: a list with zero listitems plus the "Select two to
+  // combine them" label would be malformed + actively misleading (nothing is
+  // selectable). Instead the message is a polite role="status" live region, so a
+  // screen reader announces the filter-emptied result as the user types — which
+  // the populated grid's static list cannot.
   if (visibleWords.length === 0) {
     return (
-      <div
-        className="game-buttons-container"
-        role="list"
-        aria-label="Crafted words. Select two to combine them."
-      >
-        <p className="grid-empty" role="note">
+      <div className="game-buttons-container">
+        <p className="grid-empty" role="status">
           no matches
         </p>
       </div>

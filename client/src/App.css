@@ -165,12 +165,15 @@
    the count crosses a milestone (10/25/50/100/250/500 or any multiple of 25 —
    see App.jsx). Lands the "you crossed a round number" beat against the mid-game
    plateau (README theory) while staying restrained — a slightly larger scale and
-   the --accent color, no confetti. .milestone is added ALONGSIDE .bump on the
-   same keyed span, and its more-specific selector wins the animation, so only the
-   flourish plays (not both). */
+   the gold accent text color, no confetti. .milestone is added ALONGSIDE .bump on
+   the same keyed span, and its more-specific selector wins the animation, so only
+   the flourish plays (not both). Color uses the text-safe --accent-text (same
+   token as the firstWord highlight + the "New!" badge), NOT the bare --accent,
+   since this is persistent body text — bare --accent is only ~2.3:1 on the light
+   bg and fails WCAG AA. Same gold in dark mode (where the two tokens match). */
 .discovery-count.bump.milestone {
   animation: discovery-milestone 0.5s ease-out;
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 @keyframes discovery-milestone {
@@ -188,10 +191,12 @@
 }
 
 /* The one-beat "50!" marker rendered next to the count on a milestone. Gold +
-   semibold so it reads as the celebratory accent; it only mounts for that single
-   keyed render, so it's inherently a one-shot. */
+   semibold so it reads as the celebratory accent. Uses the text-safe
+   --accent-text (matching .result-badge-new / firstWord) rather than the bare
+   --accent so this small bold text clears WCAG AA in light mode; same gold in
+   dark mode. */
 .discovery-milestone-marker {
-  color: var(--accent);
+  color: var(--accent-text);
   font-weight: 700;
 }
 

@@ -16,8 +16,11 @@ const RESULT_HOLD_MS = 500;
 
 // Grid sort modes, persisted in localStorage like the theme choice. "newest"
 // shows the most recent discovery on top (Object.keys reversed); "alpha" sorts
-// A-Z. Default is "newest" so the existing append-then-celebrate flow is
-// preserved for a player who never touches the control.
+// A-Z. Default is "newest": it INVERTS the prior insertion-order render (which
+// put the 5 base words first and appended crafted words at the bottom) so the
+// word you just made lands at the top, in view, instead of off the bottom of a
+// growing grid. That's why the new-tile scroll-into-view reward is skipped in
+// this mode (GameButton.jsx skipScroll) — the tile is already where the eye is.
 const SORT_KEY = "sortMode";
 const SORT_MODES = ["newest", "alpha"];
 function getInitialSortMode() {
@@ -72,18 +75,52 @@ function App() {
   // is treated as the baseline, not a discovery.
   const prevCountRef = useRef(discoveredCount);
   const bumpKeyRef = useRef(0);
-  // Whether the discovery that triggered the current bump landed exactly ON a
-  // milestone count. Computed in the same growth-only block so it shares the
-  // first-paint/reset-shrink suppression: it only flips true when the count
-  // actually grew INTO a milestone value, and resets to false on any other
-  // (non-milestone) growth. A ref (not state) so reading/advancing it during
-  // render can't trigger an extra render — same rationale as bumpKeyRef.
-  const milestoneRef = useRef(false);
+  // The bumpKey at which a milestone last fired, or -1 if none yet. Recorded in
+  // the growth-only block so it shares the first-paint/reset-shrink suppression.
+  // We use it (below) to (a) detect a brand-new milestone bump and (b) tie the
+  // flourish's lifetime to that specific bump, not to "until the next discovery".
+  // A ref (not state) so reading/advancing it during render can't trigger an
+  // extra render — same rationale as bumpKeyRef.
+  const milestoneKeyRef = useRef(-1);
   if (discoveredCount > prevCountRef.current) {
     bumpKeyRef.current += 1;
-    milestoneRef.current = isMilestone(discoveredCount);
+    if (isMilestone(discoveredCount)) {
+      milestoneKeyRef.current = bumpKeyRef.current;
+    }
   }
   prevCountRef.current = discoveredCount;
+
+  // Visible state of the milestone flourish (gold count + "NN!" marker). Unlike
+  // the .bump scale — a played-out animation that's simply invisible once it
+  // stops, so a lingering .bump class is harmless — the milestone adds STATIC
+  // visuals (a fixed gold color + a text marker). Those must be one-shot, or they
+  // pin to the counter on every later re-render. This track ADDED two non-growth
+  // re-render sources right next to the counter (the grid filter input + the sort
+  // toggle); without a self-clearing flag, typing one character in the filter
+  // after hitting 50 would keep the gold "50!" stuck next to the count until the
+  // player's next discovery. So we drive it off state that a timeout clears,
+  // decoupled from "next growth".
+  const [milestoneActive, setMilestoneActive] = useState(false);
+
+  // Arm/expire the flourish from the milestone bump. milestoneKeyRef advances
+  // only when a NEW milestone bump fires, so this effect runs once per milestone:
+  // it shows the flourish, then hides it after the ~0.5s animation (600ms) so the
+  // static gold + marker don't outlive the moment. Cleanup clears the timer if
+  // another milestone fires first or the component unmounts. Keyed on
+  // bumpKeyRef.current (advances on every discovery) rather than the ref value
+  // directly so a non-milestone discovery between two milestones still re-runs
+  // and correctly resolves to "not a milestone bump" -> hidden.
+  const currentBumpKey = bumpKeyRef.current;
+  useEffect(() => {
+    if (currentBumpKey > 0 && milestoneKeyRef.current === currentBumpKey) {
+      setMilestoneActive(true);
+      const id = setTimeout(() => setMilestoneActive(false), 600);
+      return () => clearTimeout(id);
+    }
+    // Any non-milestone bump (or first paint) leaves the flourish hidden.
+    setMilestoneActive(false);
+    return undefined;
+  }, [currentBumpKey]);
 
   // Show the onboarding hint until the player has discovered more than the 5
   // default words, or until they dismiss it manually.
@@ -142,19 +179,22 @@ function App() {
             key={bumpKeyRef.current}
             className={`discovery-count${
               bumpKeyRef.current > 0
-                ? milestoneRef.current
+                ? milestoneActive
                   ? " bump milestone"
                   : " bump"
                 : ""
             }`}
           >
             {discoveredCount} discovered
-            {/* One-beat inline marker on the milestone span only. aria-hidden:
-                the visual "50!" is decorative emphasis on the already-present
-                "50 discovered" count, so it shouldn't double up for a screen
-                reader (and the count line itself is visual-only — WordCombo's
-                status region owns the announcement). */}
-            {bumpKeyRef.current > 0 && milestoneRef.current ? (
+            {/* One-beat inline marker on the milestone span only. Driven by the
+                same self-clearing milestoneActive flag as the gold class, so it
+                shows for the ~0.5s flourish on the milestone discovery and then
+                clears — it does NOT linger through later filter/sort re-renders.
+                aria-hidden: the visual "50!" is decorative emphasis on the
+                already-present "50 discovered" count, so it shouldn't double up
+                for a screen reader (and the count line itself is visual-only —
+                WordCombo's status region owns the announcement). */}
+            {milestoneActive ? (
               <span className="discovery-milestone-marker" aria-hidden="true">
                 {" "}
                 {discoveredCount}!
