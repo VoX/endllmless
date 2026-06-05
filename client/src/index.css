@@ -270,3 +270,46 @@ button:hover {
     transform: scale(1);
   }
 }
+
+/* Steady, non-rotating loading affordance for reduced-motion users: a gentle
+   opacity breathe so the spinner still reads as "working" without spinning. */
+@keyframes spinner-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* ---- Reduced motion ----
+   Single guard that neutralizes the app's motion-heavy effects when the OS
+   asks for reduced motion. !important is used deliberately: this block lives in
+   index.css, which is bundled BEFORE the component stylesheets (Spinner.css,
+   GameButton.css, SelectedWord.css), so without it these equal-specificity
+   selectors would lose the cascade to the later component rules. We strip the
+   scale-pop and vertical lifts but KEEP color/shadow feedback so tiles still
+   read as interactive, and swap the spinner's infinite rotation for a calm
+   opacity pulse so the loading cue survives. */
+@media (prefers-reduced-motion: reduce) {
+  /* Kill the scale-pop that fires on every combine (both reuse @keyframes tada). */
+  .game-button.tada,
+  span.firstWord {
+    animation: none !important;
+  }
+
+  /* Drop the translateY hover/active lift but keep the color/shadow change from
+     the base :hover rule so tiles still signal interactivity. */
+  .game-button:not(.tada):hover,
+  .game-button:not(.tada):active {
+    transform: none !important;
+  }
+
+  /* Replace the infinite rotation with a steady opacity breathe so loading is
+     still visible without any rotating motion. */
+  .spinner {
+    animation: spinner-pulse 1.4s ease-in-out infinite !important;
+  }
+}
