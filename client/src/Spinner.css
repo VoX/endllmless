@@ -1,9 +1,9 @@
+/* On-brand "combine" indicator: two dots slide toward each other and merge,
+   visually echoing the game's core verb (two words becoming one). Same ~28px
+   footprint and inline placement as the old rotating border ring it replaced. */
 .spinner {
   box-sizing: border-box;
-  animation: spin 0.9s linear infinite;
-  border: 4px solid var(--spinner-track);
-  border-top-color: var(--spinner-head);
-  border-radius: 50%;
+  position: relative;
   display: inline-block;
   height: 28px;
   width: 28px;
@@ -11,12 +11,126 @@
   vertical-align: middle;
 }
 
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
+/* The two converging dots. They start apart (left/right) and pulse toward the
+   center, where they overlap into one — "two becoming one". --spinner-track
+   tints them so they sit a touch behind the brighter merge flash. */
+.spinner::before,
+.spinner::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  margin-top: -4.5px;
+  border-radius: 50%;
+  background: var(--spinner-head);
+}
+
+.spinner::before {
+  left: 1px;
+  animation: spinner-merge-left 1.1s ease-in-out infinite;
+}
+
+.spinner::after {
+  right: 1px;
+  animation: spinner-merge-right 1.1s ease-in-out infinite;
+}
+
+/* The merged-result accent: a single dot at dead center that flares (scale +
+   opacity) at the moment the two dots meet, reinforcing the "= one new word"
+   payoff before the cycle resets. */
+.spinner-merge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 11px;
+  height: 11px;
+  margin: -5.5px 0 0 -5.5px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: scale(0);
+  opacity: 0;
+  animation: spinner-merge-flash 1.1s ease-in-out infinite;
+}
+
+/* Left dot travels in to center, then back out. The horizontal distance
+   (~7px) lands it on top of the center accent at the midpoint. */
+@keyframes spinner-merge-left {
+  0%,
+  100% {
+    transform: translateX(0);
+    opacity: 0.85;
   }
 
+  45%,
+  55% {
+    transform: translateX(7px);
+    opacity: 0.35;
+  }
+}
+
+/* Right dot mirrors the left so they converge on the same center point. */
+@keyframes spinner-merge-right {
+  0%,
   100% {
-    transform: rotate(360deg);
+    transform: translateX(0);
+    opacity: 0.85;
+  }
+
+  45%,
+  55% {
+    transform: translateX(-7px);
+    opacity: 0.35;
+  }
+}
+
+/* Center flash blooms only while the two dots overlap (the 45–55% window),
+   then collapses so the next convergence reads as a fresh combine. */
+@keyframes spinner-merge-flash {
+  0%,
+  40%,
+  60%,
+  100% {
+    transform: scale(0);
+    opacity: 0;
+  }
+
+  50% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ---- Reduced motion ----
+   Honor prefers-reduced-motion consistently with the foundation track: no
+   translation/scale motion at all. The converging dots hold merged at center
+   and the whole indicator settles into a calm opacity breathe (the same cue
+   index.css applies to .spinner), so loading still reads as "working" without
+   any sliding or popping. These rules sit after index.css in the bundle, so
+   they win the cascade for the pseudo-elements / inner span; the container's
+   opacity pulse is supplied by index.css's reduced-motion .spinner rule. */
+@media (prefers-reduced-motion: reduce) {
+  .spinner::before,
+  .spinner::after,
+  .spinner-merge {
+    animation: none;
+  }
+
+  /* Park both dots at the center so the static state still depicts the merge
+     rather than two stray dots; dim them under the steady accent. */
+  .spinner::before {
+    transform: translateX(7px);
+    opacity: 0.45;
+  }
+
+  .spinner::after {
+    transform: translateX(-7px);
+    opacity: 0.45;
+  }
+
+  /* Keep the merged accent fully visible as the resting "combined" disc. */
+  .spinner-merge {
+    transform: scale(1);
+    opacity: 1;
   }
 }
