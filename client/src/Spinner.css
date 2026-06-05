@@ -12,8 +12,10 @@
 }
 
 /* The two converging dots. They start apart (left/right) and pulse toward the
-   center, where they overlap into one — "two becoming one". --spinner-track
-   tints them so they sit a touch behind the brighter merge flash. */
+   center, where they overlap into one — "two becoming one". --spinner-track is
+   the dimmer tint so the dots read as the "incoming" layer that sits behind the
+   brighter --accent merge flash; the opacity ramp in the keyframes adds depth on
+   top of that color difference. */
 .spinner::before,
 .spinner::after {
   content: "";
@@ -23,7 +25,7 @@
   height: 9px;
   margin-top: -4.5px;
   border-radius: 50%;
-  background: var(--spinner-head);
+  background: var(--spinner-track);
 }
 
 .spinner::before {
@@ -38,7 +40,8 @@
 
 /* The merged-result accent: a single dot at dead center that flares (scale +
    opacity) at the moment the two dots meet, reinforcing the "= one new word"
-   payoff before the cycle resets. */
+   payoff before the cycle resets. Uses the bright --spinner-head (the accent)
+   so it clearly out-saturates the dimmer --spinner-track dots converging on it. */
 .spinner-merge {
   position: absolute;
   top: 50%;
@@ -47,7 +50,7 @@
   height: 11px;
   margin: -5.5px 0 0 -5.5px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--spinner-head);
   transform: scale(0);
   opacity: 0;
   animation: spinner-merge-flash 1.1s ease-in-out infinite;
@@ -106,9 +109,14 @@
    translation/scale motion at all. The converging dots hold merged at center
    and the whole indicator settles into a calm opacity breathe (the same cue
    index.css applies to .spinner), so loading still reads as "working" without
-   any sliding or popping. These rules sit after index.css in the bundle, so
-   they win the cascade for the pseudo-elements / inner span; the container's
-   opacity pulse is supplied by index.css's reduced-motion .spinner rule. */
+   any sliding or popping.
+   Cascade note: the animation:none + parked transforms below win for the
+   pseudo-elements / inner span purely by intra-file source order — they're the
+   later same-specificity rules in THIS file, so they override Spinner.css's own
+   base .spinner::before/::after/.spinner-merge rules regardless of cross-file
+   bundle position. The container's opacity breathe is a separate mechanism:
+   it's supplied (and forced via !important) by index.css's reduced-motion
+   .spinner rule, which this block deliberately leaves in place. */
 @media (prefers-reduced-motion: reduce) {
   .spinner::before,
   .spinner::after,
