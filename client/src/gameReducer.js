@@ -12,7 +12,8 @@ const defaultWordState = {
     new: "",
     isFirstFound: false,
     loading: false,
-    foundDelay: false
+    foundDelay: false,
+    error: ""
 };
 
 export const initialGameState = {
@@ -48,6 +49,11 @@ function innerGameReducer(state, action) {
                 ...state,
                 confirmReset: true
             };
+        }
+        case 'cancel_reset': {
+            // Revert the pending "Are You Sure?" confirmation (e.g. the 3s
+            // safety timeout elapsed without a confirming second click).
+            return { ...state, confirmReset: false };
         }
         case 'click_word': {
             if (state.wordState.loading || state.wordState.foundDelay) {
@@ -96,9 +102,19 @@ function innerGameReducer(state, action) {
             };
         }
         case 'loading_error': {
+            // Preserve the selected pair (first/second) so the user can retry the
+            // same combination; clear loading and surface the failure kind. The
+            // WordCombo effect must NOT auto-retry while error is set, otherwise
+            // this would loop (first+second are still present here).
             return {
                 ...state,
-                wordState: defaultWordState
+                wordState: {
+                    ...state.wordState,
+                    loading: false,
+                    foundDelay: false,
+                    new: "",
+                    error: action.kind || 'generic'
+                }
             };
         }
         case 'found_delay': {

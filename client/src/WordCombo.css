@@ -22,3 +22,34 @@
   justify-content: center;
   min-width: 1ch;
 }
+
+/* Small label beside the combine result: "New!" vs "already discovered". */
+.result-badge {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  margin-left: var(--space-1);
+}
+
+.result-badge-new {
+  color: var(--accent);
+}
+
+.result-badge-discovered {
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Inline failure message for a combine that errored (rate limit / network /
+   server). Sits on the danger text color so it stands out against the bg. */
+.word-combo-error {
+  flex-basis: 100%;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--danger-text);
+  margin-top: var(--space-1);
+}

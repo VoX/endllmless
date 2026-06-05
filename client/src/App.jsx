@@ -1,5 +1,5 @@
 import "./App.css";
-import { useReducer } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { GameButtonsContainer } from "./GameButton";
 import { TitleHeader } from "./TitleHeader";
 import { gameReducer, initialGameState, initializeState } from "./gameReducer";
@@ -8,6 +8,28 @@ import { ResetButton } from "./ResetButton";
 
 function App() {
   const [gameState, dispatch] = useReducer(gameReducer, initialGameState, initializeState);
+  const [hintDismissed, setHintDismissed] = useState(false);
+  const resetTimer = useRef(null);
+
+  // Show the onboarding hint until the player has discovered more than the 5
+  // default words, or until they dismiss it manually.
+  const showHint = !hintDismissed && Object.keys(gameState.words).length <= 5;
+
+  // Reset safety: once "Are You Sure?" is showing, auto-revert after 3s if the
+  // player doesn't confirm with a second click. Cleanup clears the timer when
+  // confirmReset flips back to false (confirm) or the component unmounts.
+  useEffect(() => {
+    if (!gameState.confirmReset) {
+      return;
+    }
+    resetTimer.current = setTimeout(() => {
+      dispatch({ type: 'cancel_reset' });
+    }, 3000);
+    return () => {
+      clearTimeout(resetTimer.current);
+      resetTimer.current = null;
+    };
+  }, [gameState.confirmReset]);
 
   function resetWords() {
     dispatch({ type: 'reset_words' });
@@ -27,8 +49,8 @@ function App() {
     dispatch({ type: 'loading_word' });
   }
 
-  function loadingError() {
-    dispatch({ type: 'loading_error' });
+  function loadingError(kind) {
+    dispatch({ type: 'loading_error', kind });
   }
 
   return (
@@ -38,6 +60,21 @@ function App() {
           <TitleHeader />
           <WordCombo wordState={gameState.wordState} words={gameState.words} loadingWord={loadingWord} newWord={newWord} loadingError={loadingError} />
         </div>
+        {showHint ? (
+          <div className="onboarding-hint" role="note">
+            <span className="onboarding-hint-text">tap two things to combine them</span>
+            <button
+              type="button"
+              className="onboarding-hint-dismiss"
+              onClick={() => setHintDismissed(true)}
+              aria-label="Dismiss hint"
+            >
+              ×
+            </button>
+          </div>
+        ) : (
+          <></>
+        )}
         <GameButtonsContainer onClickWord={clickWord} words={gameState.words} />
       </div>
       <ResetButton confirmReset={gameState.confirmReset} resetWords={resetWords} />

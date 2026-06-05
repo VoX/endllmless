@@ -9,8 +9,12 @@ const wordCombineApi = async (firstWord, secondWord) => {
     // fetch only rejects on network failure, not on HTTP 4xx/5xx, so a server
     // error returns a valid JSON error body. Throw on it so the caller's catch
     // runs loadingError() instead of dispatching newWord(undefined, undefined).
+    // Attach the status so the caller can distinguish rate limiting (429) from
+    // other failures when surfacing the error to the player.
     if (!response.ok) {
-        throw new Error(`wordcombine failed: ${response.status}`);
+        const err = new Error(`wordcombine failed: ${response.status}`);
+        err.status = response.status;
+        throw err;
     }
     const wordRes = await response.json();
     if (!wordRes || typeof wordRes.newWord !== "string" || !wordRes.newWord) {
@@ -19,16 +23,25 @@ const wordCombineApi = async (firstWord, secondWord) => {
     return wordRes;
 };
 
+// Map a thrown error to the error kind stored in wordState. A network failure
+// (fetch rejected, no .status) or any 5xx is a generic "try again"; 429 is its
+// own throttle message.
+const errorKind = (error) => (error && error.status === 429 ? 'rate_limited' : 'generic');
+
 export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError }) => {
     useEffect(() => {
-        if (!wordState.loading && !wordState.foundDelay && !wordState.new && wordState.first && wordState.second) {
+        // The extra !wordState.error guard stops an auto-retry loop: loading_error
+        // intentionally keeps first/second so the user can retry, which would
+        // otherwise re-satisfy this condition immediately. Clearing error happens
+        // on the next click_word.
+        if (!wordState.loading && !wordState.foundDelay && !wordState.new && !wordState.error && wordState.first && wordState.second) {
             async function makeTheRequest() {
                 try {
                     const wordRes = await wordCombineApi(wordState.first, wordState.second);
                     newWord(wordRes.newWord, wordRes.newEmoji);
                 }
                 catch (error) {
-                    loadingError();
+                    loadingError(errorKind(error));
                 }
             }
             loadingWord();
@@ -74,11 +87,18 @@ export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError
                     the bare result word (which would otherwise double up). */}
                 <span aria-hidden="true">
                     {wordState.new ? (
-                        <SelectedWord
-                            word={wordState.new}
-                            emoji={words[wordState.new]}
-                            isFirstFound={wordState.isFirstFound}
-                        />
+                        <>
+                            <SelectedWord
+                                word={wordState.new}
+                                emoji={words[wordState.new]}
+                                isFirstFound={wordState.isFirstFound}
+                            />
+                            <span
+                                className={`result-badge ${wordState.isFirstFound ? "result-badge-new" : "result-badge-discovered"}`}
+                            >
+                                {wordState.isFirstFound ? "New!" : "already discovered"}
+                            </span>
+                        </>
                     ) : wordState.loading ? (
                         <Spinner />
                     ) : (
@@ -97,6 +117,15 @@ export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError
                     ""
                 )}
             </div>
+            {wordState.error ? (
+                <span className="word-combo-error" role="alert">
+                    {wordState.error === 'rate_limited'
+                        ? "slow down a sec"
+                        : "that didn't work, try again"}
+                </span>
+            ) : (
+                <></>
+            )}
         </div>
     );
 };
