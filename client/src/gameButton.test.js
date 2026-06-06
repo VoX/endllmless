@@ -36,6 +36,23 @@ describe('orderWords', () => {
     expect(out).not.toBe(input);
   });
 
+  it('keeps insertion order for "oldest" (oldest discovery first)', () => {
+    // "oldest" is the inverse of "newest": raw insertion = discovery order, so
+    // the oldest-discovered word stays on top.
+    const out = orderWords(['earth', 'fire', 'steam', 'mud'], 'oldest');
+    expect(out).toEqual(['earth', 'fire', 'steam', 'mud']);
+    // And it is exactly the reverse of what "newest" produces from the same keys.
+    expect(out).toEqual([...orderWords(['earth', 'fire', 'steam', 'mud'], 'newest')].reverse());
+  });
+
+  it('does not mutate the input array (and returns a copy) for oldest', () => {
+    const input = ['earth', 'fire', 'steam'];
+    const out = orderWords(input, 'oldest');
+    expect(input).toEqual(['earth', 'fire', 'steam']); // untouched
+    expect(out).toEqual(['earth', 'fire', 'steam']); // same order, fresh array
+    expect(out).not.toBe(input);
+  });
+
   it('returns the keys unchanged (identity) for any unknown sort mode', () => {
     const input = ['earth', 'fire', 'steam'];
     const out = orderWords(input, 'whatever');

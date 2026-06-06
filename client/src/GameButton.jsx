@@ -99,8 +99,9 @@ export const depthTier = (word, words) =>
   Math.min(depthOf(word, words, new Set()), DEPTH_TIERS - 1);
 
 // Derive the grid's render order from the raw discovery-order word keys.
-// "newest" = most recent discovery on top (insertion order reversed); "alpha" =
-// case-insensitive A-Z. `words` stays the source of truth — this only reorders
+// "newest" = most recent discovery on top (insertion order reversed); "oldest" =
+// oldest discovery first (raw insertion order, the inverse of "newest"); "alpha"
+// = case-insensitive A-Z. `words` stays the source of truth — this only reorders
 // the keys for rendering, so all word-keyed state (is-new, base-tile, selected)
 // is unaffected. Exported (like migrateWords) so the sort branches can be
 // unit-tested in the node env without a DOM.
@@ -113,6 +114,14 @@ export const orderWords = (keys, sortMode) => {
   if (sortMode === "newest") {
     return [...keys].reverse();
   }
+  if (sortMode === "oldest") {
+    // Raw insertion = discovery order, oldest first (the inverse of "newest").
+    // Copied so callers can't mutate the passed array via the result, matching
+    // the alpha/newest branches.
+    return [...keys];
+  }
+  // Identity fallback for an unknown mode: return the keys unchanged (same
+  // reference, no copy) so an unrecognized value renders the natural order.
   return keys;
 };
 
@@ -134,7 +143,7 @@ const GameButton = ({ emoji, onClick, word }) => {
 // words: { [word]: { emoji, from } }
 // queueEmpty: boolean (no further queued combines pending)
 // filter: string (live substring filter for the grid; "" = no filtering)
-// sortMode: "newest" | "alpha" (grid render order)
+// sortMode: "newest" | "oldest" | "alpha" (grid render order)
 // isFirstFound: boolean (the most recent combine was a genuine first discovery,
 //   not a rediscovery) — gates the first-find sparkle on the appended tile.
 // sessionBaseline: Set<string> (words present at mount, from localStorage) — any

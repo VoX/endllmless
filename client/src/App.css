@@ -45,9 +45,15 @@
   color: var(--text);
 }
 
+/* Theme toggle pinned to the right of the title row. Inset by --space-2 from the
+   title-header's right edge (which already sits at the topbar's --space-3 inner
+   padding) so the button isn't jammed against the page edge — giving ~--space-4
+   total breathing room from the viewport/topbar edge. The inset is a positive
+   offset, so it only ever pulls the button toward center, keeping it clear of the
+   edge at every width including narrow/mobile. */
 .title-header .theme-toggle {
   position: absolute;
-  right: 0;
+  right: var(--space-2);
   top: 50%;
   transform: translateY(-50%);
 }
@@ -223,9 +229,22 @@
   margin-top: var(--space-2);
 }
 
+/* Relative wrapper so the inline clear (✕) can sit inside the field's right edge.
+   Carries the field's sizing (the input fills it) and participates in the
+   .grid-controls flex row exactly where the bare input used to. */
+.grid-filter-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 9rem;
+  max-width: 60vw;
+}
+
 /* Filter input: styled with the surface/shadow tokens to match the app's quiet
    chrome (mirrors .onboarding-hint's card treatment). Not a tile — overrides the
-   global teal button-ish defaults that don't apply here anyway (it's an input). */
+   global teal button-ish defaults that don't apply here anyway (it's an input).
+   Fills the relative wrapper; extra right padding leaves room for the clear ✕ so
+   the typed text never slides under it. */
 .grid-filter {
   background: var(--surface);
   border: 1px solid var(--shadow-color);
@@ -233,8 +252,11 @@
   color: var(--text);
   font-size: 0.85rem;
   padding: var(--space-1) var(--space-2);
-  width: 9rem;
-  max-width: 60vw;
+  /* Reserve room on the right for the clear button (its ~1.4rem box + a small
+     gap) so long filter text doesn't run under the ✕. */
+  padding-right: calc(1.4rem + var(--space-1));
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .grid-filter::placeholder {
@@ -242,6 +264,50 @@
 }
 
 .grid-filter:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Hide the browser's native type="search" clear control (WebKit/Blink draw one,
+   Firefox doesn't, and it can't be styled) so only our consistent ✕ shows. */
+.grid-filter::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* Small, unobtrusive clear (✕) button overlaid inside the input's right edge.
+   Shown only when there's text (rendered conditionally in App.jsx). Muted by
+   default, brightening on hover/focus like the other quiet topbar chrome.
+   Overrides the global teal button fill/shadow. */
+.grid-filter-clear {
+  position: absolute;
+  right: var(--space-1);
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  box-shadow: none;
+  border: none;
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  line-height: 1;
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: color 0.12s ease, background-color 0.12s ease;
+}
+
+.grid-filter-clear:hover {
+  background: transparent;
+  color: var(--text);
+}
+
+.grid-filter-clear:focus-visible {
   outline: 3px solid var(--focus);
   outline-offset: 2px;
 }

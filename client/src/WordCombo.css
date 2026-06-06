@@ -5,7 +5,17 @@
   flex-wrap: wrap;
   gap: var(--space-1);
   margin-bottom: var(--space-3);
-  min-height: 50px;
+  /* Reserve the row's tallest state so the page doesn't bump when the result —
+     and especially the lineage chips — populate after the "=". The 50px floor
+     already buffers the single equation/result line (resting "? + ? = ?",
+     spinner, and a plain result/rediscovery all sit on one line). A fresh first
+     find adds the .combo-lineage chips, which wrap onto a SECOND line
+     (flex-basis:100% + its 2px margin-top), and that's the jump players saw. So
+     reserve the second chip line (~1.4rem incl. the chip's 0.7rem text + its
+     padding + the 2px gap) on top of the single-line floor, keeping the row a
+     stable height across resting -> spinner -> result -> result+lineage. rem so
+     it tracks the text scale; --space-1 covers the lineage's own top gap. */
+  min-height: calc(50px + 1.4rem + var(--space-1));
 }
 
 .combo-op {
