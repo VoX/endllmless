@@ -15,14 +15,34 @@ import { ResetButton } from "./ResetButton";
 const RESULT_HOLD_MS = 500;
 
 // Grid sort modes, persisted in localStorage like the theme choice. "newest"
-// shows the most recent discovery on top (Object.keys reversed); "alpha" sorts
-// A-Z. Default is "newest": it INVERTS the prior insertion-order render (which
-// put the 5 base words first and appended crafted words at the bottom) so the
-// word you just made lands at the top, in view, instead of off the bottom of a
-// growing grid. That's why the new-tile scroll-into-view reward is skipped in
-// this mode (GameButton.jsx skipScroll) — the tile is already where the eye is.
+// shows the most recent discovery on top (Object.keys reversed); "oldest" shows
+// the oldest discovery first (raw insertion order); "alpha" sorts A-Z. Default
+// is "newest": it INVERTS the prior insertion-order render (which put the 5 base
+// words first and appended crafted words at the bottom) so the word you just made
+// lands at the top, in view, instead of off the bottom of a growing grid. That's
+// why the new-tile scroll-into-view reward is skipped in this mode (GameButton.jsx
+// skipScroll) — the tile is already where the eye is. The control cycles
+// newest -> oldest -> alpha -> newest (see SORT_CYCLE below).
 const SORT_KEY = "sortMode";
-const SORT_MODES = ["newest", "alpha"];
+const SORT_MODES = ["newest", "oldest", "alpha"];
+// Next mode for the cycling sort control, plus the short label + a11y/title text
+// for each. Defined once so the button's display, aria-label and the cycle order
+// can't drift apart. aria-label names the CURRENT order then what a click does.
+const SORT_CYCLE = {
+  newest: "oldest",
+  oldest: "alpha",
+  alpha: "newest",
+};
+const SORT_LABEL = {
+  newest: "newest",
+  oldest: "oldest",
+  alpha: "A–Z",
+};
+const SORT_ARIA = {
+  newest: "Sort order: newest first. Click to sort oldest first.",
+  oldest: "Sort order: oldest first. Click to sort A to Z.",
+  alpha: "Sort order: A to Z. Click to sort newest first.",
+};
 function getInitialSortMode() {
   try {
     const saved = localStorage.getItem(SORT_KEY);
@@ -373,28 +393,45 @@ function App() {
               reachable while scrolling a large collection. Both are client-only —
               no game/reducer state. */}
           <div className="grid-controls">
-            <input
-              type="search"
-              className="grid-filter"
-              value={filter}
-              onInput={(e) => setFilter(e.currentTarget.value)}
-              placeholder="Filter…"
-              aria-label="Filter crafted words"
-            />
+            {/* Filter input + inline clear (✕). The clear button is wrapped with
+                the input (relative wrapper) so it can sit inside the field's right
+                edge; it renders only when there's text and resets the filter the
+                same way onInput does (setFilter("")). We render our own ✕ rather
+                than rely on type="search"'s native clear, which only some browsers
+                draw (WebKit yes, Firefox no) and can't be styled. */}
+            <div className="grid-filter-wrap">
+              <input
+                type="search"
+                className="grid-filter"
+                value={filter}
+                onInput={(e) => setFilter(e.currentTarget.value)}
+                placeholder="Filter…"
+                aria-label="Filter crafted words"
+              />
+              {filter ? (
+                <button
+                  type="button"
+                  className="grid-filter-clear"
+                  onClick={() => setFilter("")}
+                  aria-label="Clear filter"
+                  title="Clear filter"
+                >
+                  <span aria-hidden="true">✕</span>
+                </button>
+              ) : (
+                <></>
+              )}
+            </div>
             <button
               type="button"
               className="sort-toggle"
               onClick={() =>
-                setSortMode((m) => (m === "newest" ? "alpha" : "newest"))
+                setSortMode((m) => SORT_CYCLE[m] ?? "newest")
               }
-              aria-label={
-                sortMode === "newest"
-                  ? "Sort order: newest first. Click to sort A to Z."
-                  : "Sort order: A to Z. Click to sort newest first."
-              }
-              title={sortMode === "newest" ? "Newest first" : "A–Z"}
+              aria-label={SORT_ARIA[sortMode] ?? SORT_ARIA.newest}
+              title={SORT_LABEL[sortMode] ?? SORT_LABEL.newest}
             >
-              {sortMode === "newest" ? "newest" : "A–Z"}
+              {SORT_LABEL[sortMode] ?? SORT_LABEL.newest}
             </button>
             {/* "Surprise me": one tap combines two random owned tiles for a player
                 who's stalled. Gated off while a combine is loading or in its result
