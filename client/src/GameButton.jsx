@@ -148,7 +148,12 @@ const GameButton = ({ emoji, onClick, word }) => {
 // programmaticSelectWords: string[] read on each nonce bump — the word(s) to mark
 //   .selected so a chip re-seed highlights its tile like a manual first tap (one
 //   word); [] for "Surprise me" (it combines in the same tick — ring-clear only).
-export const GameButtonsContainer = ({ onClickWord, words, queueEmpty, filter = "", sortMode = "newest", isFirstFound = false, sessionBaseline = null, programmaticSelectNonce = 0, programmaticSelectWords = [] }) => {
+// containerRef: ref attached to the word-list container so a lineage-chip re-seed
+//   in App can move keyboard focus here (the chip unmounts on activation, which
+//   would otherwise drop focus to <body>). The container carries tabindex=-1 so
+//   it's a programmatic focus target only (not in the Tab sequence); its focus
+//   outline is suppressed in CSS since it's a managed landing spot, not a control.
+export const GameButtonsContainer = ({ onClickWord, words, queueEmpty, filter = "", sortMode = "newest", isFirstFound = false, sessionBaseline = null, programmaticSelectNonce = 0, programmaticSelectWords = [], containerRef = null }) => {
   const [tadaWord, setTadaWord] = useState(null);
   // The just-crafted tile currently playing its one-shot entrance pop. Cleared
   // after the entrance finishes so the class doesn't re-apply on later renders.
@@ -406,7 +411,7 @@ export const GameButtonsContainer = ({ onClickWord, words, queueEmpty, filter = 
   // the populated grid's static list cannot.
   if (visibleWords.length === 0) {
     return (
-      <div className="game-buttons-container">
+      <div className="game-buttons-container" ref={containerRef} tabIndex={-1}>
         <p className="grid-empty" role="status">
           {`no matches for "${filter.trim()}"`}
         </p>
@@ -417,6 +422,8 @@ export const GameButtonsContainer = ({ onClickWord, words, queueEmpty, filter = 
   return (
     <div
       className="game-buttons-container"
+      ref={containerRef}
+      tabIndex={-1}
       role="list"
       aria-label="Crafted words. Select two to combine them."
     >

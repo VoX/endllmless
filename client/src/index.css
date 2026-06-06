@@ -55,6 +55,15 @@
      navy bg (~9.9:1 on the outer edge); the light theme darkens it because the
      low-chroma gold --accent (#c79a00) only reaches ~1.6-2.3:1 there. */
   --new-ring: #ffd700;
+  /* First-find sparkle sweep color. A glint is a HIGHLIGHT — it must read lighter
+     than the teal --tile-bg it sweeps across in BOTH themes. In dark mode the
+     bright gold reads as a glint over the tile (kept here), but the new-ring's
+     light-mode value is the DARK gold #7a5f00, which as a 0.55-opacity sweep over
+     the lighter teal tile reads as a dark smudge passing over it (inverted — a
+     shadow wipe, not a shimmer). So the sparkle gets its OWN token, pointed at a
+     near-white in light mode (see the light palette), instead of reusing
+     --new-ring (which wants the dark readable gold for ITS 3:1 ring contrast). */
+  --sparkle: #ffd700;
 
   /* Text */
   --text: #ececec;
@@ -111,6 +120,11 @@
      3:1 non-text minimum the bright gold --accent fails here. Matches
      --accent-text so the readable-gold treatment stays consistent. */
   --new-ring: #7a5f00;
+  /* Light-mode sparkle: a near-white highlight so the first-find glint reads as a
+     bright shimmer lifting OFF the teal tile, not the dark-gold smudge that
+     reusing --new-ring (#7a5f00) here produced. White-ish in light, bright gold
+     in dark — a highlight in both, unlike the ring which needs the dark gold. */
+  --sparkle: #ffffff;
 
   --text: #1b3a5f;
   --text-muted: #5b7088;
@@ -147,6 +161,8 @@
     --focus: #0b5cab;
     --accent-text: #7a5f00;
     --new-ring: #7a5f00;
+    /* Near-white sparkle highlight in OS-light (matches [data-theme="light"]). */
+    --sparkle: #ffffff;
     --text: #1b3a5f;
     --text-muted: #5b7088;
     --danger: #c0392b;
@@ -178,6 +194,8 @@
   --focus: #ffd700;
   --accent-text: #ffd700;
   --new-ring: #ffd700;
+  /* Bright gold sparkle in explicit-dark (matches the default dark :root). */
+  --sparkle: #ffd700;
   --text: #ececec;
   --text-muted: #9bb0c4;
   --danger: #e5534b;

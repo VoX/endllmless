@@ -295,14 +295,18 @@
   border-color: var(--text-muted);
 }
 
-/* Disabled while a combine is loading or in its result hold: dim + not-allowed,
-   and neutralize the hover so it reads as inert during the gate. */
-.surprise-button:disabled {
+/* Gated off (aria-disabled) while a combine is loading or in its result hold:
+   dim + not-allowed, and neutralize the hover so it reads as inert during the
+   gate. Keyed off [aria-disabled="true"] rather than :disabled because the button
+   uses aria-disabled (not the disabled attribute) to stay focusable across the
+   combine — see the JSX note. The handler no-ops on the same condition, so the
+   dimmed control is genuinely inert even though it remains clickable/focusable. */
+.surprise-button[aria-disabled="true"] {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.surprise-button:disabled:hover {
+.surprise-button[aria-disabled="true"]:hover {
   background: transparent;
   color: var(--text);
   border-color: var(--shadow-color);

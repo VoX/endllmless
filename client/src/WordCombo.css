@@ -77,11 +77,16 @@
 .combo-lineage {
   display: flex;
   flex-basis: 100%;
+  /* flex-wrap so a long recipe (e.g. "photosynthesis" + "carbon dioxide") wraps
+     the second chip under the first instead of overflowing the sticky topbar on a
+     narrow (~320px) phone — matching the flex-wrap the sibling .word-combo row
+     uses. (The prior white-space:nowrap was inert on a flex container AND the one
+     spot a long recipe could blow out the layout width, so it's removed.) */
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: var(--space-1);
   margin-top: 2px;
-  white-space: nowrap;
 }
 
 /* The "+" between the two lineage chips: muted recede like the equation-row

@@ -10,6 +10,18 @@
   width: 100%;
 }
 
+/* The container carries tabindex=-1 only as a PROGRAMMATIC focus landing spot
+   (a lineage-chip re-seed moves focus here so it doesn't fall to <body> when the
+   chip unmounts). It's not a user-navigable control and isn't in the Tab order,
+   so it should not paint the global focus ring when it receives that managed
+   focus — the tiles inside show their own rings as the user tabs through them.
+   Suppresses both focus and focus-visible (some browsers mark a programmatic
+   focus right after a keyboard activation as focus-visible). */
+.game-buttons-container:focus,
+.game-buttons-container:focus-visible {
+  outline: none;
+}
+
 /* Listitem wrapper carries the a11y role without affecting flex layout. */
 .game-button-item {
   display: contents;
@@ -213,11 +225,15 @@
    element": the sparkle is a separate layer on a separate property, so it can run
    concurrently with either scale animation without the sequencing dance the
    entrance/tada pair needs.
-   The glint is a soft diagonal highlight sweep (a transparent->accent-tinted->
+   The glint is a soft diagonal highlight sweep (a transparent->highlight-tinted->
    transparent linear gradient) that fades in, brightens, and fades out once. Uses
-   --new-ring (the theme-aware accent already used for the new-tile ring) so the
-   novelty cue stays on-palette in both themes. pointer-events:none + low peak
-   opacity so it reads as a quick shimmer, not a flash, and never blocks the tile.
+   the theme-aware --sparkle token (bright gold in dark, near-white in light) — a
+   value LIGHTER than the teal tile in BOTH themes so the sweep reads as a glint
+   lifting off the tile, not a dark smudge passing over it. (It deliberately does
+   NOT reuse --new-ring: that token is the dark readable gold in light mode for the
+   ring's 3:1 contrast, which as a sweep over the teal tile inverts to a shadow
+   wipe.) pointer-events:none + low peak opacity so it reads as a quick shimmer,
+   not a flash, and never blocks the tile.
    Stacking: this ::after has NO explicit z-index, so it paints just above the
    tile's own background per normal stacking order. The emoji/label are given
    `position: relative; z-index: 1` (see .game-button-emoji / .game-button-label),
@@ -231,7 +247,7 @@
   background: linear-gradient(
     120deg,
     transparent 30%,
-    var(--new-ring) 50%,
+    var(--sparkle) 50%,
     transparent 70%
   );
   opacity: 0;

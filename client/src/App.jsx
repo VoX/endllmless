@@ -220,37 +220,68 @@ function App() {
   // passes [] — there's no lasting single selection to show, just the ring-clear.
   const programmaticSelectWordsRef = useRef([]);
 
+  // Ref to the grid's word-list container so a lineage-chip re-seed can move
+  // keyboard focus there. A chip UNMOUNTS the instant it's activated (clicking it
+  // dispatches reseed_word -> wordState.new=false -> the whole .combo-lineage span
+  // is removed in the same commit), which would otherwise drop focus to <body>
+  // (WCAG 2.4.3 Focus Order). The grid is the natural next stop — the player picks
+  // the second word from these tiles — and it stays mounted across the re-seed, so
+  // focus survives the chip's removal. Forwarded into GameButtonsContainer.
+  const gridRef = useRef(null);
+
   function clickWord(word) {
     dispatch({ type: 'click_word', word });
   }
 
   // Lineage-chip re-seed: start a brand-new selection from one source word of the
-  // just-found recipe. Uses reseed_word, NOT click_word: the chips only render
-  // during the result hold (wordState.new && isFirstFound), where foundDelay is
-  // truthy and click_word would ENQUEUE a half-pair instead of seeding a fresh
-  // pick — the feature's only reachable state. reseed_word always seeds first=word
-  // and drops the in-flight hold. Bump the programmatic-select nonce (with this
-  // one word) so the grid both clears the stale is-new ring AND highlights the
-  // re-seeded tile, matching how a manual first tap looks.
+  // just-found recipe. Uses reseed_word, NOT click_word: the chips render whenever
+  // wordState.new && isFirstFound, which spans BOTH the foundDelay=true result hold
+  // AND the lingering post-hold state (found_delay flips foundDelay->false on an
+  // empty queue but keeps new + isFirstFound, so the chips persist and stay
+  // clickable). During the foundDelay=true window a plain click_word would ENQUEUE
+  // a half-pair instead of seeding a fresh pick; reseed_word always seeds
+  // first=word and drops any in-flight hold, so it's correct across both states.
+  // Bump the programmatic-select nonce (with this one word) so the grid both clears
+  // the stale is-new ring AND highlights the re-seeded tile, matching how a manual
+  // first tap looks. Then move keyboard focus off the chip (which unmounts the
+  // instant new flips false) onto the still-mounted grid so it doesn't fall to
+  // <body> — see the focus call below.
   function reseedWord(word) {
     programmaticSelectWordsRef.current = [word];
     programmaticSelectRef.current += 1;
     dispatch({ type: 'reseed_word', word });
+    // Move focus to the still-mounted grid BEFORE the dispatch's re-render unmounts
+    // the chip, so keyboard focus lands on the tiles (where the second word is
+    // picked next) instead of falling to <body>. Called synchronously here: Preact
+    // commits the re-render after this handler returns, and the grid container is
+    // present both now and after, so the focus is stable across the chip's removal.
+    // Guarded for the rare filter-emptied grid (ref unset) and non-DOM environments.
+    if (gridRef.current && typeof gridRef.current.focus === "function") {
+      gridRef.current.focus();
+    }
   }
 
   // "Surprise me": pick two random owned words and run them through the SAME
-  // selection flow a manual combine uses — dispatch click_word twice (first then
-  // second); WordCombo's effect auto-fires the request once both are set. The
-  // game/server allows self-combines (Fire+Fire), so two independent samples are
-  // fine even if they land on the same word. Guarded against firing mid-combine:
-  // the reducer's click_word ENQUEUES while loading/foundDelay rather than
-  // starting a fresh pair, so two clicks here during a hold would silently queue
-  // a stray combine instead of doing the obvious thing. So we no-op while a
-  // combine is in flight or in its result hold (same gate the button's disabled
-  // state reflects) and never start an overlapping request. Bumps the
-  // programmatic-select nonce too, so the grid clears the prior discovery's stale
-  // is-new ring as this surprise combine begins (it bypasses the grid's own
-  // handleClick, the only place that ring is normally cleared).
+  // selection flow a manual combine uses; WordCombo's effect auto-fires the
+  // request once both are set. The game/server allows self-combines (Fire+Fire),
+  // so two independent samples are fine even if they land on the same word.
+  //
+  // Seed the FIRST pick with reseed_word (not click_word) then set the second with
+  // click_word. reseed_word unconditionally seeds first=word and clears wordState,
+  // so it works from EVERY reachable resting state. Two plain click_words would be
+  // wrong from a resting HALF-selection (one tile already tapped, second empty):
+  // click_word only seeds `first` when !first, so with `first` already set both
+  // randoms would take the "set second" branch — the second dispatch overwrites
+  // the first, silently discarding one random pick AND keeping the player's stale
+  // pre-existing first word, so it wouldn't be a two-random surprise at all.
+  // reseed_word(first) wipes any half-selection first, guaranteeing BOTH randoms
+  // land. (reseed_word also clears the queue, which a surprise should never have.)
+  //
+  // Guarded against firing mid-combine: we no-op while a combine is in flight or
+  // in its result hold (the same gate the button reflects) so we never start an
+  // overlapping request. Bumps the programmatic-select nonce too, so the grid
+  // clears the prior discovery's stale is-new ring as this surprise combine begins
+  // (it bypasses the grid's own handleClick, the only place that ring is cleared).
   function surpriseMe() {
     if (gameState.wordState.loading || gameState.wordState.foundDelay) return;
     const keys = Object.keys(gameState.words);
@@ -259,7 +290,7 @@ function App() {
     const second = keys[Math.floor(Math.random() * keys.length)];
     programmaticSelectWordsRef.current = [];
     programmaticSelectRef.current += 1;
-    clickWord(first);
+    dispatch({ type: 'reseed_word', word: first });
     clickWord(second);
   }
 
@@ -366,16 +397,22 @@ function App() {
               {sortMode === "newest" ? "newest" : "A–Z"}
             </button>
             {/* "Surprise me": one tap combines two random owned tiles for a player
-                who's stalled. Disabled while a combine is loading or in its result
+                who's stalled. Gated off while a combine is loading or in its result
                 hold so it respects the same gate the reducer enforces and never
-                starts an overlapping request (the handler no-ops in that window
-                too — belt and suspenders). Styled like .sort-toggle for a
-                consistent topbar chrome. */}
+                starts an overlapping request — surpriseMe() no-ops on exactly that
+                condition. Uses aria-disabled (not the disabled ATTRIBUTE) so the
+                button stays focusable across the combine: a real `disabled` can't
+                hold focus, so a keyboard user who triggers it would lose focus to
+                <body> for the combine's duration (WCAG 2.4.3). aria-disabled keeps
+                it in the a11y tree as "dimmed/unavailable" while the handler's own
+                guard absorbs the keypress, so focus stays put. Styled like
+                .sort-toggle (the [aria-disabled] CSS mirrors the old :disabled
+                dim). */}
             <button
               type="button"
               className="surprise-button"
               onClick={surpriseMe}
-              disabled={gameState.wordState.loading || gameState.wordState.foundDelay}
+              aria-disabled={gameState.wordState.loading || gameState.wordState.foundDelay}
               aria-label="Combine two random words"
               title="Surprise me"
             >
@@ -415,6 +452,7 @@ function App() {
           sessionBaseline={sessionBaselineRef.current}
           programmaticSelectNonce={programmaticSelectRef.current}
           programmaticSelectWords={programmaticSelectWordsRef.current}
+          containerRef={gridRef}
         />
       </div>
       <ResetButton confirmReset={gameState.confirmReset} resetWords={resetWords} />
