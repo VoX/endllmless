@@ -138,6 +138,24 @@ function innerGameReducer(state, action) {
                 confirmReset: false
             };
         }
+        case 'reseed_word': {
+            // Deliberate re-seed of a brand-new selection from a single source word
+            // (the lineage chips on a fresh find). Unlike click_word this ALWAYS
+            // seeds first=word and never enqueues: the chips are only reachable
+            // during the result hold (new + isFirstFound), where wordState.foundDelay
+            // is truthy, so a plain click_word would take the ENQUEUE branch and
+            // orphan a half-pair instead of starting a fresh pick. Starting a new
+            // selection means the in-flight hold's result is intentionally dropped,
+            // so we reset wordState to the single-word seed and clear any queued
+            // batch (same "abort the rest" stance loading_error takes) so a pending
+            // found_delay can't later pop a stray pair on top of the fresh seed.
+            return {
+                ...state,
+                wordsQueue: [],
+                wordState: { ...defaultWordState, first: action.word },
+                confirmReset: false
+            };
+        }
         case 'loading_word': {
             return {
                 ...state,

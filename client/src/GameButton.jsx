@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { baseWords } from "./gameReducer.js";
 import "./GameButton.css";
 
@@ -139,7 +139,16 @@ const GameButton = ({ emoji, onClick, word }) => {
 //   not a rediscovery) — gates the first-find sparkle on the appended tile.
 // sessionBaseline: Set<string> (words present at mount, from localStorage) — any
 //   current word NOT in this set is a this-session discovery (quiet corner dot).
-export const GameButtonsContainer = ({ onClickWord, words, queueEmpty, filter = "", sortMode = "newest", isFirstFound = false, sessionBaseline = null }) => {
+// programmaticSelectNonce: number bumped by App when a combine is started NOT by a
+//   direct tile tap (a lineage-chip re-seed or "Surprise me"). Those paths dispatch
+//   to the reducer directly, bypassing handleClick — the only place the persistent
+//   is-new ring + the .selected highlight are normally cleared. Clearing them on
+//   each bump keeps a programmatic combine from running with the prior discovery's
+//   stale gold ring still lit on a tile that's no longer the active selection.
+// programmaticSelectWords: string[] read on each nonce bump — the word(s) to mark
+//   .selected so a chip re-seed highlights its tile like a manual first tap (one
+//   word); [] for "Surprise me" (it combines in the same tick — ring-clear only).
+export const GameButtonsContainer = ({ onClickWord, words, queueEmpty, filter = "", sortMode = "newest", isFirstFound = false, sessionBaseline = null, programmaticSelectNonce = 0, programmaticSelectWords = [] }) => {
   const [tadaWord, setTadaWord] = useState(null);
   // The just-crafted tile currently playing its one-shot entrance pop. Cleared
   // after the entrance finishes so the class doesn't re-apply on later renders.
@@ -312,6 +321,30 @@ export const GameButtonsContainer = ({ onClickWord, words, queueEmpty, filter = 
     prevWords.current = currentWords;
   }, [words]);
 
+  // Latest programmaticSelectWords in a ref so the nonce-keyed effect below can
+  // read the words to highlight WITHOUT depending on the array (it's a fresh ref
+  // value each render, so listing it as a dep would re-run the effect spuriously).
+  const programmaticSelectWordsRef = useRef(programmaticSelectWords);
+  programmaticSelectWordsRef.current = programmaticSelectWords;
+
+  // Sync the grid's selection markers when App signals a PROGRAMMATIC combine (a
+  // lineage-chip re-seed or "Surprise me" — bumped via programmaticSelectNonce).
+  // Those paths dispatch to the reducer directly and never reach handleClick,
+  // which is the only place the persistent is-new ring (setNewWord(null)) + the
+  // .selected highlight are otherwise updated. So clear the stale ring + fade-out
+  // and set .selected to the re-seed's word(s) (one for a chip re-seed so its tile
+  // highlights like a manual first tap; [] for surprise me, which combines in the
+  // same tick). Skip the initial mount (the nonce starts at 0 and no programmatic
+  // action has run) so we don't blank a freshly-restored newWord on first paint.
+  const prevNonceRef = useRef(programmaticSelectNonce);
+  useEffect(() => {
+    if (programmaticSelectNonce === prevNonceRef.current) return;
+    prevNonceRef.current = programmaticSelectNonce;
+    setNewWord(null);
+    setFadeOutWords([]);
+    setSelectedWords(programmaticSelectWordsRef.current);
+  }, [programmaticSelectNonce]);
+
   // Track selected words for highlight
   function handleClick(word) {
     if (onClickWord) onClickWord(word);
@@ -331,6 +364,23 @@ export const GameButtonsContainer = ({ onClickWord, words, queueEmpty, filter = 
     });
     setFadeOutWords([]); // Remove fade-out if re-selecting
   }
+
+  // Depth tier per word, memoized on the `words` identity. A word's lineage is
+  // immutable once discovered, so its tier only changes when `words` itself does
+  // (a discovery or reset) — NOT on the far hotter non-`words` re-renders this
+  // container also takes: every filter keystroke (filter is a prop), every
+  // selection, every queue tick. Computing it per visible tile in the render loop
+  // (each a fresh recursive lineage walk) re-walked the whole collection on each
+  // of those; this lifts it to once per `words` change. Output is identical — it
+  // calls the same depthTier the tests cover — just no longer recomputed on the
+  // typing/selection path. Look up tierMap.get(word) in the loop below.
+  const tierMap = useMemo(() => {
+    const m = new Map();
+    for (const word of Object.keys(words)) {
+      m.set(word, depthTier(word, words));
+    }
+    return m;
+  }, [words]);
 
   // Derived render order + active filter. `words` is unchanged (source of truth);
   // we only reorder/narrow the KEYS for display, so every word-keyed visual state
@@ -390,7 +440,11 @@ export const GameButtonsContainer = ({ onClickWord, words, queueEmpty, filter = 
         if (isSessionNew) btnClass += " session-new";
         // Depth tier (capped) drives a subtle data-depth treatment so deeper words
         // read as more "evolved". 0 = resting baseline (no tint); CSS styles 1..N.
-        const tier = depthTier(word, words);
+        // Read from the memoized tierMap (computed once per `words` change above)
+        // rather than re-walking the lineage per tile on every render; fall back to
+        // a direct compute if a word somehow isn't in the map (shouldn't happen —
+        // the map is built from the same Object.keys(words)).
+        const tier = tierMap.has(word) ? tierMap.get(word) : depthTier(word, words);
         // Persistent new ring. The suppression below is defensive only: the new
         // tile is never the one that fades out (fadeOutWords holds the two SOURCE
         // tiles), and handleClick clears newWord before any tile can become

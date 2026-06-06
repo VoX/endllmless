@@ -221,6 +221,53 @@ describe('gameReducer: click_word', () => {
   });
 });
 
+describe('gameReducer: reseed_word', () => {
+  it('seeds a fresh single-word selection even during the result hold (foundDelay)', () => {
+    // The lineage chips only render during the result hold, where foundDelay is
+    // truthy. A plain click_word there would ENQUEUE; reseed_word must instead
+    // start a brand-new selection with just `first` set, dropping the held result.
+    const held = {
+      ...initialGameState,
+      wordState: {
+        ...initialGameState.wordState,
+        first: 'fire',
+        second: 'water',
+        new: 'steam',
+        isFirstFound: true,
+        foundDelay: true,
+      },
+    };
+    const next = gameReducer(held, { type: 'reseed_word', word: 'fire' });
+
+    expect(next.wordState.first).toBe('fire');
+    expect(next.wordState.second).toBe('');
+    expect(next.wordState.new).toBe('');
+    expect(next.wordState.foundDelay).toBe(false);
+    expect(next.wordState.loading).toBe(false);
+    expect(next.confirmReset).toBe(false);
+  });
+
+  it('also seeds fresh while a request is in flight (loading), not enqueue', () => {
+    const loading = pairState(); // first/second set, loading: true
+    const next = gameReducer(loading, { type: 'reseed_word', word: 'earth' });
+    expect(next.wordState).toEqual({
+      ...initialGameState.wordState,
+      first: 'earth',
+    });
+    expect(next.wordsQueue).toEqual([]);
+  });
+
+  it('drops any queued batch so a pending found_delay cannot pop a stray pair', () => {
+    const queued = {
+      ...pairState(),
+      wordsQueue: [{ first: 'earth', second: 'wind' }],
+    };
+    const next = gameReducer(queued, { type: 'reseed_word', word: 'life' });
+    expect(next.wordsQueue).toEqual([]);
+    expect(next.wordState.first).toBe('life');
+  });
+});
+
 describe('gameReducer: reset_words + cancel_reset', () => {
   it('first reset only arms the confirmation, second reset performs it', () => {
     // Start from a dirtied state: extra discovered word + an active selection.

@@ -119,10 +119,18 @@ export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError
             ) : (
                 ""
             )}
-            <div className="combo-result" role="status" aria-live="polite" aria-atomic="true">
-                {/* Visible result is hidden from the live region so the screen
-                    reader announces the self-contained sentence below instead of
-                    the bare result word (which would otherwise double up). */}
+            {/* Visual-only result container. NOT a live region: it holds the
+                focusable lineage chips, and an aria-atomic live region here would
+                sweep those chips' accessible names ("Combine again from X/Y") into
+                the announcement on every find — re-reading the source words on top
+                of the self-contained sentence below (double chatter). The screen
+                reader announcement lives in its OWN dedicated region (the
+                visually-hidden role=status sibling after this div), so the chips
+                stay out of any live region while remaining reachable via Tab. */}
+            <div className="combo-result">
+                {/* Visible result is aria-hidden: the dedicated live region below
+                    announces the self-contained sentence instead of the bare result
+                    word (which would otherwise double up). */}
                 <span aria-hidden="true">
                     {wordState.new ? (
                         <>
@@ -145,15 +153,15 @@ export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError
                 </span>
                 {/* Lineage on a fresh find only: the "X + Y" recipe the player just
                     grew, now as two tappable chips that re-seed a fresh selection
-                    from a source word (onSelectWord -> clickWord). Rendered OUTSIDE
-                    the aria-hidden result span above ON PURPOSE: these are real
-                    focusable controls, and aria-hidden on an ancestor would both
-                    strip them from the accessibility tree AND leave a keyboard-
-                    focusable element hidden from AT (an axe/WCAG violation). The
-                    recipe *content* is still announced once by the self-contained
-                    "X plus Y equals Z" sentence in the live region below, so each
-                    chip carries an action-oriented aria-label ("Combine again from
-                    X") instead of re-reading the bare word — no double-announce. The
+                    from a source word (onSelectWord -> reseedWord). These are real
+                    focusable controls, so they live OUTSIDE any aria-hidden span
+                    (which would strip them from the a11y tree while leaving them
+                    keyboard-focusable — an axe/WCAG violation) AND outside any live
+                    region (so their labels aren't folded into the find
+                    announcement). The recipe *content* is announced once by the
+                    self-contained "X plus Y equals Z" sentence in the dedicated live
+                    region below, so each chip carries an action-oriented aria-label
+                    ("Combine again from X") instead of re-reading the bare word. The
                     "+" between them stays aria-hidden (decorative). Gated on
                     onSelectWord so the row degrades to nothing if the prop is ever
                     omitted, rather than rendering dead chips. */}
@@ -180,21 +188,24 @@ export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError
                 ) : (
                     ""
                 )}
+            </div>
+            {/* Dedicated screen-reader live region for the combine outcome. Split
+                out of .combo-result (which now holds the focusable chips) so the
+                atomic announcement covers ONLY this self-contained sentence — the
+                chips no longer ride it. aria-atomic so the full sentence is read as
+                one unit on each change. */}
+            <div className="visually-hidden" role="status" aria-live="polite" aria-atomic="true">
                 {wordState.first && wordState.second && wordState.new ? (
-                    <span className="visually-hidden">
-                        {/* Fold the new-vs-rediscovered distinction (shown visually
-                            by the aria-hidden badge) into the announced sentence so
-                            screen-reader users get the same signal. On a milestone
-                            first-find, also fold in the milestone cue (the visual
-                            gold flourish + "NN!" marker are aria-hidden), so AT
-                            users get the same "you crossed a round number" beat —
-                            in the SAME one-shot sentence, no competing live region. */}
-                        {`${wordState.first} plus ${wordState.second} equals ${wordState.new}${wordState.isFirstFound ? ", a new discovery" : ", already discovered"}${milestoneReached ? ", milestone reached" : ""}`}
-                    </span>
+                    /* Fold the new-vs-rediscovered distinction (shown visually by the
+                       aria-hidden badge) into the announced sentence so screen-reader
+                       users get the same signal. On a milestone first-find, also fold
+                       in the milestone cue (the visual gold flourish + "NN!" marker
+                       are aria-hidden), so AT users get the same "you crossed a round
+                       number" beat — in the SAME one-shot sentence, no competing
+                       live region. */
+                    `${wordState.first} plus ${wordState.second} equals ${wordState.new}${wordState.isFirstFound ? ", a new discovery" : ", already discovered"}${milestoneReached ? ", milestone reached" : ""}`
                 ) : wordState.first && wordState.second && wordState.loading ? (
-                    <span className="visually-hidden">
-                        {`combining ${wordState.first} and ${wordState.second}`}
-                    </span>
+                    `combining ${wordState.first} and ${wordState.second}`
                 ) : (
                     ""
                 )}

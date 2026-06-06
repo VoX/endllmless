@@ -79,10 +79,17 @@ function App() {
   // (not in the snapshot) get marked and prior-session words don't.
   //
   // Reset caveat: reset_words rebuilds the map to the 5 base words, which ARE in
-  // this snapshot (they were present at mount too — defaults or persisted), so a
-  // reset correctly clears all session markers back to the bare base set without
-  // needing to re-snapshot. (A word re-crafted AFTER a reset is still "new this
-  // session" — it wasn't in the mount snapshot — which is the right read.)
+  // this snapshot (present at mount too — defaults or persisted), so a reset clears
+  // the session dots back to the bare base set without re-snapshotting.
+  //
+  // Known minor inaccuracy (cosmetic only, not a state bug): the baseline is the
+  // MOUNT set, never re-snapshotted. For a returning player who loads with a large
+  // save, resets, then RE-crafts a word that was in that old save, the word is a
+  // member of the baseline, so it gets NO "new this session" dot even though it was
+  // just made this session post-reset. A word that was NOT in the old save does get
+  // the dot. Acceptable for a quiet marker; the affirmative fix (track a
+  // craftedThisSession set, or re-snapshot when the map shrinks to the base set)
+  // is deferred since the dot is decoration, not game state.
   const sessionBaselineRef = useRef(null);
   if (sessionBaselineRef.current === null) {
     sessionBaselineRef.current = new Set(Object.keys(gameState.words));
@@ -192,8 +199,43 @@ function App() {
     dispatch({ type: 'reset_words' });
   }
 
+  // Bumped whenever a combine is started PROGRAMMATICALLY (a lineage-chip re-seed
+  // or "Surprise me") rather than by a direct tile tap. The grid container owns
+  // the visual selection markers (the .selected tile highlight + the persistent
+  // gold is-new ring on the last-crafted tile) and only updates them in its own
+  // handleClick — which these programmatic paths bypass, since they dispatch to
+  // the reducer directly. Without a signal the container would keep showing the
+  // prior discovery's is-new ring through a chip/surprise combine (a stale
+  // "newest" marker on a tile that's no longer the active selection). The
+  // container watches this nonce and clears those markers when it advances, so a
+  // programmatic combine starts from a clean grid like a manual one does. A ref
+  // (not state) so advancing it in a handler doesn't itself force a render — the
+  // dispatch each programmatic path also fires re-renders the tree, propagating
+  // the new value to the container as a prop, where an effect keyed on it runs.
+  const programmaticSelectRef = useRef(0);
+  // The word(s) the grid should mark .selected when it next picks up a bump. A
+  // chip re-seed leaves ONE word selected (the player picks the second tile next),
+  // so the grid should highlight it like a manual first tap would. Surprise me
+  // fires the combine in the same tick (both picks dispatched at once), so it
+  // passes [] — there's no lasting single selection to show, just the ring-clear.
+  const programmaticSelectWordsRef = useRef([]);
+
   function clickWord(word) {
     dispatch({ type: 'click_word', word });
+  }
+
+  // Lineage-chip re-seed: start a brand-new selection from one source word of the
+  // just-found recipe. Uses reseed_word, NOT click_word: the chips only render
+  // during the result hold (wordState.new && isFirstFound), where foundDelay is
+  // truthy and click_word would ENQUEUE a half-pair instead of seeding a fresh
+  // pick — the feature's only reachable state. reseed_word always seeds first=word
+  // and drops the in-flight hold. Bump the programmatic-select nonce (with this
+  // one word) so the grid both clears the stale is-new ring AND highlights the
+  // re-seeded tile, matching how a manual first tap looks.
+  function reseedWord(word) {
+    programmaticSelectWordsRef.current = [word];
+    programmaticSelectRef.current += 1;
+    dispatch({ type: 'reseed_word', word });
   }
 
   // "Surprise me": pick two random owned words and run them through the SAME
@@ -205,13 +247,18 @@ function App() {
   // starting a fresh pair, so two clicks here during a hold would silently queue
   // a stray combine instead of doing the obvious thing. So we no-op while a
   // combine is in flight or in its result hold (same gate the button's disabled
-  // state reflects) and never start an overlapping request.
+  // state reflects) and never start an overlapping request. Bumps the
+  // programmatic-select nonce too, so the grid clears the prior discovery's stale
+  // is-new ring as this surprise combine begins (it bypasses the grid's own
+  // handleClick, the only place that ring is normally cleared).
   function surpriseMe() {
     if (gameState.wordState.loading || gameState.wordState.foundDelay) return;
     const keys = Object.keys(gameState.words);
     if (keys.length === 0) return;
     const first = keys[Math.floor(Math.random() * keys.length)];
     const second = keys[Math.floor(Math.random() * keys.length)];
+    programmaticSelectWordsRef.current = [];
+    programmaticSelectRef.current += 1;
     clickWord(first);
     clickWord(second);
   }
@@ -248,7 +295,7 @@ function App() {
             loadingWord={loadingWord}
             newWord={newWord}
             loadingError={loadingError}
-            onSelectWord={clickWord}
+            onSelectWord={reseedWord}
             milestoneReached={
               !!gameState.wordState.new &&
               gameState.wordState.isFirstFound &&
@@ -366,6 +413,8 @@ function App() {
           sortMode={sortMode}
           isFirstFound={gameState.wordState.isFirstFound}
           sessionBaseline={sessionBaselineRef.current}
+          programmaticSelectNonce={programmaticSelectRef.current}
+          programmaticSelectWords={programmaticSelectWordsRef.current}
         />
       </div>
       <ResetButton confirmReset={gameState.confirmReset} resetWords={resetWords} />

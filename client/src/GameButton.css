@@ -218,11 +218,11 @@
    --new-ring (the theme-aware accent already used for the new-tile ring) so the
    novelty cue stays on-palette in both themes. pointer-events:none + low peak
    opacity so it reads as a quick shimmer, not a flash, and never blocks the tile.
-   z-index keeps it above the tile fill but the label/emoji sit in normal flow on
-   the button itself (the pseudo-element is behind the button's text content since
-   ::after with a positive z-index still renders under non-positioned siblings? —
-   it's drawn over the fill; the label/emoji are given relative stacking via the
-   tile's own content, and the low opacity keeps text legible regardless). */
+   Stacking: this ::after has NO explicit z-index, so it paints just above the
+   tile's own background per normal stacking order. The emoji/label are given
+   `position: relative; z-index: 1` (see .game-button-emoji / .game-button-label),
+   which lifts them above the glint so the text stays crisp through the sweep; the
+   low peak opacity keeps them legible regardless. */
 .game-button.sparkle::after {
   content: "";
   position: absolute;
@@ -285,11 +285,12 @@
 /* ---- Depth-tier tile treatment ----
    Tiles carry a data-depth (1..3, capped — see depthTier in GameButton.jsx) that
    scales how "evolved" a deeper word reads, so the collection FEELS like it's
-   compounding (README theory #6). Kept token-derived and SUBTLE: a progressively
-   stronger box-shadow (depth on the tile's elevation) plus a hair more presence
-   on the base-tile-style amber edge cue at the deepest tier — NOT a hue ramp, so
-   it never becomes a rainbow and the teal --tile-bg fill (and thus the
-   --tile-text label contrast, AA on every tier) is untouched.
+   compounding (README theory #6). Kept token-derived and SUBTLE: purely a
+   progressively stronger box-shadow (depth on the tile's elevation) — NOT a hue
+   ramp and NOT any edge/::before treatment, so it never becomes a rainbow and the
+   teal --tile-bg fill (and thus the --tile-text label contrast, AA on every tier)
+   is untouched. (The amber left-edge stripe is base-tile-only; base tiles are
+   never depth-tiered, so the two never combine.)
    Composes only on the RESTING tile: selected/fade-out/is-new all set their own
    background/box-shadow and must win, so these selectors are scoped with
    :not(.selected):not(.fade-out):not(.is-new) — the same precedent base-tile sets
