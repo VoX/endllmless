@@ -22,32 +22,29 @@ span.firstWord {
    Scoped to `.firstWord .word-emoji` ONLY so it never fires on the resting
    selected SelectedWord instances in the combine row (WordCombo renders the
    first/second words with isFirstFound=false, so they get no `.firstWord`).
-   Kept short (~0.4s) so it finishes well inside the result hold + tada window
-   (RESULT_HOLD_MS=500 in App.jsx, tada=1s in index.css). Compose-safe: the
-   parent .firstWord animates transform:scale (tada); this targets the CHILD
-   emoji span, so the two scale animations live on different elements and
-   compose cleanly (no two-scale-on-one-element fight — unlike the
-   tile-enter/tada case the codebase guards). The soft halo uses --accent. */
+   Kept short so it finishes well inside the result hold + tada window.
+   Compose-safe: the parent .firstWord animates transform:scale (tada); this
+   targets the CHILD emoji span, so the two scale animations live on different
+   elements and compose cleanly (no two-scale-on-one-element fight — unlike the
+   tile-enter/tada case the codebase guards). Scale-only, matching the
+   transform-only one-shots elsewhere (tada/discovery-bump/discovery-milestone);
+   .word-emoji is a flex item of the inline-flex span.word, so the transform
+   applies without any display override. */
 .firstWord .word-emoji {
-  /* inline-block so the transform/scale applies to the emoji glyph. */
-  display: inline-block;
   animation: emoji-pop 0.4s ease-out 1;
 }
 
 @keyframes emoji-pop {
   0% {
     transform: scale(0.6);
-    text-shadow: 0 0 0 var(--accent);
   }
 
   60% {
     transform: scale(1.15);
-    text-shadow: 0 0 8px var(--accent);
   }
 
   100% {
     transform: scale(1);
-    text-shadow: 0 0 0 var(--accent);
   }
 }
 
