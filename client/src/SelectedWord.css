@@ -15,3 +15,46 @@ span.firstWord {
   color: var(--accent-text);
   /* Adjust time and easing as needed */
 }
+
+/* First-discovery emoji micro-entrance: on a genuine first find the result
+   emoji gets its OWN quick pop on top of the whole-word tada, so the glyph —
+   the core payoff — has its own moment instead of just riding the word scale.
+   Scoped to `.firstWord .word-emoji` ONLY so it never fires on the resting
+   selected SelectedWord instances in the combine row (WordCombo renders the
+   first/second words with isFirstFound=false, so they get no `.firstWord`).
+   Kept short so it finishes well inside the result hold + tada window.
+   Compose-safe: the parent .firstWord animates transform:scale (tada); this
+   targets the CHILD emoji span, so the two scale animations live on different
+   elements and compose cleanly (no two-scale-on-one-element fight — unlike the
+   tile-enter/tada case the codebase guards). Scale-only, matching the
+   transform-only one-shots elsewhere (tada/discovery-bump/discovery-milestone);
+   .word-emoji is a flex item of the inline-flex span.word, so the transform
+   applies without any display override. */
+.firstWord .word-emoji {
+  animation: emoji-pop 0.4s ease-out 1;
+}
+
+@keyframes emoji-pop {
+  0% {
+    transform: scale(0.6);
+  }
+
+  60% {
+    transform: scale(1.15);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Honor prefers-reduced-motion consistently with every other animation guard
+   in the codebase (index.css/App.css/Spinner.css): fully neutralize the emoji
+   pop — no scale, no transform. This rule sits LATER in SelectedWord.css than
+   the .firstWord .word-emoji rule above (equal specificity), so it wins the
+   cascade without needing !important. */
+@media (prefers-reduced-motion: reduce) {
+  .firstWord .word-emoji {
+    animation: none;
+  }
+}

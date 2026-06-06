@@ -70,6 +70,31 @@ function App() {
   // after a reset for free.
   const discoveredCount = Object.keys(gameState.words).length;
 
+  // Snapshot the words present at mount (the localStorage-loaded set, via
+  // initializeState) so the grid can mark what's genuinely NEW THIS SESSION vs.
+  // long-ago discoveries a returning player has dozens of. Purely derived client
+  // state — no reducer/localStorage change. A ref (computed once at mount) so the
+  // baseline never shifts as the session's discoveries grow; the container diffs
+  // the CURRENT keys against this set at render, so words crafted this session
+  // (not in the snapshot) get marked and prior-session words don't.
+  //
+  // Reset caveat: reset_words rebuilds the map to the 5 base words, which ARE in
+  // this snapshot (present at mount too — defaults or persisted), so a reset clears
+  // the session dots back to the bare base set without re-snapshotting.
+  //
+  // Known minor inaccuracy (cosmetic only, not a state bug): the baseline is the
+  // MOUNT set, never re-snapshotted. For a returning player who loads with a large
+  // save, resets, then RE-crafts a word that was in that old save, the word is a
+  // member of the baseline, so it gets NO "new this session" dot even though it was
+  // just made this session post-reset. A word that was NOT in the old save does get
+  // the dot. Acceptable for a quiet marker; the affirmative fix (track a
+  // craftedThisSession set, or re-snapshot when the map shrinks to the base set)
+  // is deferred since the dot is decoration, not game state.
+  const sessionBaselineRef = useRef(null);
+  if (sessionBaselineRef.current === null) {
+    sessionBaselineRef.current = new Set(Object.keys(gameState.words));
+  }
+
   // Replay the "+1" bump only when the total actually GROWS — not on first paint
   // (nothing was just discovered) and not on a reset's N->5 shrink (that's a
   // removal, so a celebratory scale-up would be semantically backwards). We bump
@@ -174,8 +199,99 @@ function App() {
     dispatch({ type: 'reset_words' });
   }
 
+  // Bumped whenever a combine is started PROGRAMMATICALLY (a lineage-chip re-seed
+  // or "Surprise me") rather than by a direct tile tap. The grid container owns
+  // the visual selection markers (the .selected tile highlight + the persistent
+  // gold is-new ring on the last-crafted tile) and only updates them in its own
+  // handleClick — which these programmatic paths bypass, since they dispatch to
+  // the reducer directly. Without a signal the container would keep showing the
+  // prior discovery's is-new ring through a chip/surprise combine (a stale
+  // "newest" marker on a tile that's no longer the active selection). The
+  // container watches this nonce and clears those markers when it advances, so a
+  // programmatic combine starts from a clean grid like a manual one does. A ref
+  // (not state) so advancing it in a handler doesn't itself force a render — the
+  // dispatch each programmatic path also fires re-renders the tree, propagating
+  // the new value to the container as a prop, where an effect keyed on it runs.
+  const programmaticSelectRef = useRef(0);
+  // The word(s) the grid should mark .selected when it next picks up a bump. A
+  // chip re-seed leaves ONE word selected (the player picks the second tile next),
+  // so the grid should highlight it like a manual first tap would. Surprise me
+  // fires the combine in the same tick (both picks dispatched at once), so it
+  // passes [] — there's no lasting single selection to show, just the ring-clear.
+  const programmaticSelectWordsRef = useRef([]);
+
+  // Ref to the grid's word-list container so a lineage-chip re-seed can move
+  // keyboard focus there. A chip UNMOUNTS the instant it's activated (clicking it
+  // dispatches reseed_word -> wordState.new=false -> the whole .combo-lineage span
+  // is removed in the same commit), which would otherwise drop focus to <body>
+  // (WCAG 2.4.3 Focus Order). The grid is the natural next stop — the player picks
+  // the second word from these tiles — and it stays mounted across the re-seed, so
+  // focus survives the chip's removal. Forwarded into GameButtonsContainer.
+  const gridRef = useRef(null);
+
   function clickWord(word) {
     dispatch({ type: 'click_word', word });
+  }
+
+  // Lineage-chip re-seed: start a brand-new selection from one source word of the
+  // just-found recipe. Uses reseed_word, NOT click_word: the chips render whenever
+  // wordState.new && isFirstFound, which spans BOTH the foundDelay=true result hold
+  // AND the lingering post-hold state (found_delay flips foundDelay->false on an
+  // empty queue but keeps new + isFirstFound, so the chips persist and stay
+  // clickable). During the foundDelay=true window a plain click_word would ENQUEUE
+  // a half-pair instead of seeding a fresh pick; reseed_word always seeds
+  // first=word and drops any in-flight hold, so it's correct across both states.
+  // Bump the programmatic-select nonce (with this one word) so the grid both clears
+  // the stale is-new ring AND highlights the re-seeded tile, matching how a manual
+  // first tap looks. Then move keyboard focus off the chip (which unmounts the
+  // instant new flips false) onto the still-mounted grid so it doesn't fall to
+  // <body> — see the focus call below.
+  function reseedWord(word) {
+    programmaticSelectWordsRef.current = [word];
+    programmaticSelectRef.current += 1;
+    dispatch({ type: 'reseed_word', word });
+    // Move focus to the still-mounted grid BEFORE the dispatch's re-render unmounts
+    // the chip, so keyboard focus lands on the tiles (where the second word is
+    // picked next) instead of falling to <body>. Called synchronously here: Preact
+    // commits the re-render after this handler returns, and the grid container is
+    // present both now and after, so the focus is stable across the chip's removal.
+    // Guarded for the rare filter-emptied grid (ref unset) and non-DOM environments.
+    if (gridRef.current && typeof gridRef.current.focus === "function") {
+      gridRef.current.focus();
+    }
+  }
+
+  // "Surprise me": pick two random owned words and run them through the SAME
+  // selection flow a manual combine uses; WordCombo's effect auto-fires the
+  // request once both are set. The game/server allows self-combines (Fire+Fire),
+  // so two independent samples are fine even if they land on the same word.
+  //
+  // Seed the FIRST pick with reseed_word (not click_word) then set the second with
+  // click_word. reseed_word unconditionally seeds first=word and clears wordState,
+  // so it works from EVERY reachable resting state. Two plain click_words would be
+  // wrong from a resting HALF-selection (one tile already tapped, second empty):
+  // click_word only seeds `first` when !first, so with `first` already set both
+  // randoms would take the "set second" branch — the second dispatch overwrites
+  // the first, silently discarding one random pick AND keeping the player's stale
+  // pre-existing first word, so it wouldn't be a two-random surprise at all.
+  // reseed_word(first) wipes any half-selection first, guaranteeing BOTH randoms
+  // land. (reseed_word also clears the queue, which a surprise should never have.)
+  //
+  // Guarded against firing mid-combine: we no-op while a combine is in flight or
+  // in its result hold (the same gate the button reflects) so we never start an
+  // overlapping request. Bumps the programmatic-select nonce too, so the grid
+  // clears the prior discovery's stale is-new ring as this surprise combine begins
+  // (it bypasses the grid's own handleClick, the only place that ring is cleared).
+  function surpriseMe() {
+    if (gameState.wordState.loading || gameState.wordState.foundDelay) return;
+    const keys = Object.keys(gameState.words);
+    if (keys.length === 0) return;
+    const first = keys[Math.floor(Math.random() * keys.length)];
+    const second = keys[Math.floor(Math.random() * keys.length)];
+    programmaticSelectWordsRef.current = [];
+    programmaticSelectRef.current += 1;
+    dispatch({ type: 'reseed_word', word: first });
+    clickWord(second);
   }
 
   async function newWord(word, emoji) {
@@ -210,6 +326,7 @@ function App() {
             loadingWord={loadingWord}
             newWord={newWord}
             loadingError={loadingError}
+            onSelectWord={reseedWord}
             milestoneReached={
               !!gameState.wordState.new &&
               gameState.wordState.isFirstFound &&
@@ -279,6 +396,28 @@ function App() {
             >
               {sortMode === "newest" ? "newest" : "A–Z"}
             </button>
+            {/* "Surprise me": one tap combines two random owned tiles for a player
+                who's stalled. Gated off while a combine is loading or in its result
+                hold so it respects the same gate the reducer enforces and never
+                starts an overlapping request — surpriseMe() no-ops on exactly that
+                condition. Uses aria-disabled (not the disabled ATTRIBUTE) so the
+                button stays focusable across the combine: a real `disabled` can't
+                hold focus, so a keyboard user who triggers it would lose focus to
+                <body> for the combine's duration (WCAG 2.4.3). aria-disabled keeps
+                it in the a11y tree as "dimmed/unavailable" while the handler's own
+                guard absorbs the keypress, so focus stays put. Styled like
+                .sort-toggle (the [aria-disabled] CSS mirrors the old :disabled
+                dim). */}
+            <button
+              type="button"
+              className="surprise-button"
+              onClick={surpriseMe}
+              aria-disabled={gameState.wordState.loading || gameState.wordState.foundDelay}
+              aria-label="Combine two random words"
+              title="Surprise me"
+            >
+              🎲
+            </button>
           </div>
         </div>
         {showHint ? (
@@ -309,6 +448,11 @@ function App() {
           queueEmpty={gameState.wordsQueue.length === 0}
           filter={filter}
           sortMode={sortMode}
+          isFirstFound={gameState.wordState.isFirstFound}
+          sessionBaseline={sessionBaselineRef.current}
+          programmaticSelectNonce={programmaticSelectRef.current}
+          programmaticSelectWords={programmaticSelectWordsRef.current}
+          containerRef={gridRef}
         />
       </div>
       <ResetButton confirmReset={gameState.confirmReset} resetWords={resetWords} />

@@ -16,6 +16,26 @@
   /* ---- Dark palette (default) ---- */
   /* Surfaces */
   --bg: #142d4c;
+  /* Ambient top glow color for the body backdrop (see the body rule below). A
+     slightly lifted navy over --bg. Kept faint enough that --text (#ececec) and
+     --text-muted (#9bb0c4) still clear WCAG AA over the brightest blend point
+     (#1a3a60 → ~9.8:1 / ~5.2:1). Paired with --bg-glow-0 (the same color at zero
+     alpha) so the gradient fades cleanly: fading to bare `transparent`
+     (= transparent-BLACK) would drag the stop's RGB toward 0 in straight-alpha
+     sRGB interpolation and tint the fade. */
+  --bg-glow: rgba(31, 68, 112, 0.55);
+  --bg-glow-0: rgba(31, 68, 112, 0);
+  /* Darkening color for the dark-only edge vignette (see the dark body rule).
+     Tokenized to match the file's tokens-for-colors convention. */
+  --bg-vignette: rgba(0, 0, 0, 0.18);
+  /* Full dark backdrop layer stack: edge vignette over the top glow over --bg.
+     Defined once here (and mirrored on :root[data-theme="dark"]) so both dark
+     palette-resolution paths share a single declaration and can't drift. The
+     glow fades to --bg-glow-0 (its own zero-alpha twin); the vignette fades to
+     bare `transparent`, which is fine here because it interpolates
+     transparent-black -> rgba(0,0,0,0.18) — both already dark. */
+  --bg-layers: radial-gradient(ellipse at center, transparent 55%, var(--bg-vignette)),
+    radial-gradient(ellipse at top, var(--bg-glow), var(--bg-glow-0) 60%), var(--bg);
   --surface: #1b3a5f;
   --tile-bg: #9fd3c7;
   --tile-hover: #b9e3d9;
@@ -35,6 +55,15 @@
      navy bg (~9.9:1 on the outer edge); the light theme darkens it because the
      low-chroma gold --accent (#c79a00) only reaches ~1.6-2.3:1 there. */
   --new-ring: #ffd700;
+  /* First-find sparkle sweep color. A glint is a HIGHLIGHT — it must read lighter
+     than the teal --tile-bg it sweeps across in BOTH themes. In dark mode the
+     bright gold reads as a glint over the tile (kept here), but the new-ring's
+     light-mode value is the DARK gold #7a5f00, which as a 0.55-opacity sweep over
+     the lighter teal tile reads as a dark smudge passing over it (inverted — a
+     shadow wipe, not a shimmer). So the sparkle gets its OWN token, pointed at a
+     near-white in light mode (see the light palette), instead of reusing
+     --new-ring (which wants the dark readable gold for ITS 3:1 ring contrast). */
+  --sparkle: #ffd700;
 
   /* Text */
   --text: #ececec;
@@ -61,6 +90,17 @@
    in sync. Applied via prefers-color-scheme below and [data-theme="light"]. */
 :root[data-theme="light"] {
   --bg: #eef3f8;
+  /* Light ambient top glow: a barely-cool near-white that sits a hair LIGHTER
+     than --bg, so the brightest point lifts toward white (#f2f7fb). Because the
+     light --bg is already near-white, a darker tint here would pull the bg down
+     and break the marginal --text-muted contrast (it's only ~4.57:1 on bare
+     --bg); lifting toward white instead nudges muted up to ~4.73:1 at the
+     brightest point, keeping AA intact. --bg-glow-0 is the same near-white at
+     zero alpha so the gradient fades to a transparent version of THIS color
+     rather than bare `transparent` (transparent-black), which would otherwise
+     drag the fade through a dingy mid-gray over the near-white bg. */
+  --bg-glow: rgba(242, 247, 251, 0.9);
+  --bg-glow-0: rgba(242, 247, 251, 0);
   --surface: #ffffff;
   --tile-bg: #9fd3c7;
   --tile-hover: #b9e3d9;
@@ -80,6 +120,11 @@
      3:1 non-text minimum the bright gold --accent fails here. Matches
      --accent-text so the readable-gold treatment stays consistent. */
   --new-ring: #7a5f00;
+  /* Light-mode sparkle: a near-white highlight so the first-find glint reads as a
+     bright shimmer lifting OFF the teal tile, not the dark-gold smudge that
+     reusing --new-ring (#7a5f00) here produced. White-ish in light, bright gold
+     in dark — a highlight in both, unlike the ring which needs the dark gold. */
+  --sparkle: #ffffff;
 
   --text: #1b3a5f;
   --text-muted: #5b7088;
@@ -102,6 +147,12 @@
 @media (prefers-color-scheme: light) {
   :root:not([data-theme]) {
     --bg: #eef3f8;
+    /* Matches [data-theme="light"] --bg-glow/--bg-glow-0 (token-sync
+       discipline): a barely-cool near-white slightly lighter than --bg so the
+       glow lifts toward white and keeps the marginal muted-text contrast
+       AA-clear, plus its zero-alpha twin so the gradient fades cleanly. */
+    --bg-glow: rgba(242, 247, 251, 0.9);
+    --bg-glow-0: rgba(242, 247, 251, 0);
     --surface: #ffffff;
     --tile-hover: #b9e3d9;
     --tile-hover-text: #142d4c;
@@ -110,6 +161,8 @@
     --focus: #0b5cab;
     --accent-text: #7a5f00;
     --new-ring: #7a5f00;
+    /* Near-white sparkle highlight in OS-light (matches [data-theme="light"]). */
+    --sparkle: #ffffff;
     --text: #1b3a5f;
     --text-muted: #5b7088;
     --danger: #c0392b;
@@ -124,6 +177,15 @@
 /* Explicit dark override (beats the OS-light media query above). */
 :root[data-theme="dark"] {
   --bg: #142d4c;
+  /* Matches the default dark :root --bg-glow/--bg-glow-0 (token-sync
+     discipline): faint lifted navy whose brightest blend over --bg keeps
+     --text/--text-muted AA, plus its zero-alpha twin for a clean gradient fade. */
+  --bg-glow: rgba(31, 68, 112, 0.55);
+  --bg-glow-0: rgba(31, 68, 112, 0);
+  --bg-vignette: rgba(0, 0, 0, 0.18);
+  /* Mirrors the default dark :root --bg-layers (token-sync discipline). */
+  --bg-layers: radial-gradient(ellipse at center, transparent 55%, var(--bg-vignette)),
+    radial-gradient(ellipse at top, var(--bg-glow), var(--bg-glow-0) 60%), var(--bg);
   --surface: #1b3a5f;
   --tile-hover: #b9e3d9;
   --tile-hover-text: #142d4c;
@@ -132,6 +194,8 @@
   --focus: #ffd700;
   --accent-text: #ffd700;
   --new-ring: #ffd700;
+  /* Bright gold sparkle in explicit-dark (matches the default dark :root). */
+  --sparkle: #ffd700;
   --text: #ececec;
   --text-muted: #9bb0c4;
   --danger: #e5534b;
@@ -149,9 +213,45 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: var(--bg);
+  /* Ambient themed backdrop: a soft radial glow centered at the top, fading to
+     --bg-glow-0 (the glow color at zero alpha) by 60% of the viewport, layered
+     over the flat page color. Fading to the glow's own zero-alpha twin avoids
+     the transparent-black gotcha (bare `transparent` would tint the fade in
+     straight-alpha sRGB). The opaque sticky .topbar paints its own --bg over the
+     top-center band, so the glow mostly reads below the topbar and in the gutters
+     beside it on wide viewports rather than literally behind the title. Driven
+     off the theme-aware --bg-glow/--bg-glow-0 tokens so it tracks the palette.
+     `background-attachment: fixed` anchors it to the viewport (iOS Safari and
+     some Android browsers fall back to `scroll`, which is visually negligible for
+     a faint static glow). Static gradient, so no prefers-reduced-motion concern. */
+  background: radial-gradient(ellipse at top, var(--bg-glow), var(--bg-glow-0) 60%),
+    var(--bg);
+  background-attachment: fixed;
   color: var(--text);
   font-size: calc(10px + 2vmin);
+}
+
+/* Dark-only edge vignette: a second, very soft radial layer that darkens the
+   viewport corners for depth, stacked under the same top glow. Scoped to the
+   dark palette ONLY because a darkening wash over the near-white light --bg just
+   looks muddy. The full layer stack lives in the --bg-vignette/--bg-layers
+   custom properties (defined on both dark :root selectors), so the two
+   palette-resolution paths (explicit toggle + OS default) reference one shared
+   declaration and can't drift. Re-declares background-attachment so fixed
+   anchoring is preserved alongside the layered backgrounds. */
+:root[data-theme="dark"] body {
+  background: var(--bg-layers);
+  background-attachment: fixed;
+}
+
+/* OS-default dark (no explicit [data-theme]): same vignette. Gated by the dark
+   media query so the OS-light default — which resolves to the light palette
+   above — is left with the glow only. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) body {
+    background: var(--bg-layers);
+    background-attachment: fixed;
+  }
 }
 
 code {

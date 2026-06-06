@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { baseWords } from "./gameReducer.js";
 import "./GameButton.css";
 
@@ -22,6 +22,18 @@ const prefersReducedMotion = () =>
 // below), and this duration is how long we wait.
 const TILE_ENTER_MS = 220;
 
+// First-discovery sparkle: a brief one-shot glint over a freshly appended tile
+// when (and only when) the result is a GENUINE first find (isFirstFound) — a
+// rediscovery gets the plain entrance/tada with no sparkle. The glint lives on a
+// ::after pseudo-element animating OPACITY (never transform:scale on the tile),
+// so it composes cleanly with the tile's own scale animations (tile-enter, then
+// tada) instead of fighting them — the same "never overlap two scale animations
+// on one element" invariant the entrance/tada sequencing exists for. This is how
+// long the class stays applied (kept in sync with the sparkle @keyframes in
+// GameButton.css); cleared after it on a timer like enterWord so it can replay
+// on the next first find.
+const SPARKLE_MS = 700;
+
 // Case-insensitive substring match for the grid filter. An empty/whitespace-only
 // query matches everything (no filtering). Shared by the render-time .filter and
 // the new-tile scroll guard so "is this word currently shown?" is decided one way.
@@ -32,6 +44,59 @@ export const matchesQuery = (word, query) => {
   if (!q) return true;
   return word.toLowerCase().includes(q);
 };
+
+// How many perceptible depth tiers the tile treatment caps at (tier 0 = base /
+// shallow, up to DEPTH_TIERS-1). Kept small (4) and capped so a deep collection
+// reads as "more evolved" via a few steps rather than turning the grid into a
+// rainbow gradient. depthTier() clamps to this; the CSS only styles depth-1..3
+// (0 = the resting baseline).
+export const DEPTH_TIERS = 4;
+
+// Compute how many combines deep a word is from the base elements, using the
+// stored lineage (words[word].from = [a, b], null for base). Base words (no
+// `from`) are depth 0; otherwise depth is 1 + max(depth(parents)). Pure +
+// exported (like orderWords/matchesQuery) so it's unit-testable in the node env.
+//
+// `words` is the full { word: { emoji, from } } map. Guards, because `from` is
+// persisted user data that legacy/migrated/foreign saves can make ill-formed:
+//   - cycle guard (`seen` set on the path): a word whose lineage loops back to
+//     itself (shouldn't happen from normal play, but corrupted/hand-edited saves
+//     can) resolves to 0 for the looped branch instead of recursing forever;
+//   - missing-parent guard: a parent no longer in the map (e.g. a migrated save
+//     that kept `from` but lost the parent word) contributes depth 0 rather than
+//     throwing on the undefined entry.
+// Result is the RAW depth (uncapped); depthTier() maps it onto the tier scale.
+export const depthOf = (word, words, seen) => {
+  const entry = words ? words[word] : undefined;
+  // Base word, missing entry, or no/!well-formed lineage -> depth 0. (We don't
+  // re-validate the pair shape strictly here — migrateWords already drops garbled
+  // `from` to null — but the missing-parent branch below absorbs a parent that
+  // isn't in the map.)
+  if (!entry || !Array.isArray(entry.from) || entry.from.length !== 2) {
+    return 0;
+  }
+  // Cycle guard: if we've already visited this word on the current path, treat
+  // this branch as bottoming out (don't recurse into the loop).
+  if (seen && seen.has(word)) {
+    return 0;
+  }
+  const nextSeen = seen ? seen : new Set();
+  nextSeen.add(word);
+  const [a, b] = entry.from;
+  const depthA = depthOf(a, words, nextSeen);
+  const depthB = depthOf(b, words, nextSeen);
+  // Pop this word off the path so sibling branches (the other parent) don't see
+  // it as already-visited — `seen` tracks the ANCESTOR chain, not all-seen.
+  nextSeen.delete(word);
+  return 1 + Math.max(depthA, depthB);
+};
+
+// Map a word's raw depth onto the capped tier scale [0, DEPTH_TIERS-1]. The CSS
+// styles tiers 1..DEPTH_TIERS-1 (tier 0 is the unmodified resting tile), so a
+// chain deeper than the cap saturates at the top tier rather than escalating
+// forever into an unreadable tile.
+export const depthTier = (word, words) =>
+  Math.min(depthOf(word, words, new Set()), DEPTH_TIERS - 1);
 
 // Derive the grid's render order from the raw discovery-order word keys.
 // "newest" = most recent discovery on top (insertion order reversed); "alpha" =
@@ -70,11 +135,37 @@ const GameButton = ({ emoji, onClick, word }) => {
 // queueEmpty: boolean (no further queued combines pending)
 // filter: string (live substring filter for the grid; "" = no filtering)
 // sortMode: "newest" | "alpha" (grid render order)
-export const GameButtonsContainer = ({ onClickWord, words, queueEmpty, filter = "", sortMode = "newest" }) => {
+// isFirstFound: boolean (the most recent combine was a genuine first discovery,
+//   not a rediscovery) — gates the first-find sparkle on the appended tile.
+// sessionBaseline: Set<string> (words present at mount, from localStorage) — any
+//   current word NOT in this set is a this-session discovery (quiet corner dot).
+// programmaticSelectNonce: number bumped by App when a combine is started NOT by a
+//   direct tile tap (a lineage-chip re-seed or "Surprise me"). Those paths dispatch
+//   to the reducer directly, bypassing handleClick — the only place the persistent
+//   is-new ring + the .selected highlight are normally cleared. Clearing them on
+//   each bump keeps a programmatic combine from running with the prior discovery's
+//   stale gold ring still lit on a tile that's no longer the active selection.
+// programmaticSelectWords: string[] read on each nonce bump — the word(s) to mark
+//   .selected so a chip re-seed highlights its tile like a manual first tap (one
+//   word); [] for "Surprise me" (it combines in the same tick — ring-clear only).
+// containerRef: ref attached to the word-list container so a lineage-chip re-seed
+//   in App can move keyboard focus here (the chip unmounts on activation, which
+//   would otherwise drop focus to <body>). The container carries tabindex=-1 so
+//   it's a programmatic focus target only (not in the Tab sequence); its focus
+//   outline is suppressed in CSS since it's a managed landing spot, not a control.
+export const GameButtonsContainer = ({ onClickWord, words, queueEmpty, filter = "", sortMode = "newest", isFirstFound = false, sessionBaseline = null, programmaticSelectNonce = 0, programmaticSelectWords = [], containerRef = null }) => {
   const [tadaWord, setTadaWord] = useState(null);
   // The just-crafted tile currently playing its one-shot entrance pop. Cleared
   // after the entrance finishes so the class doesn't re-apply on later renders.
   const [enterWord, setEnterWord] = useState(null);
+  // The freshly appended tile currently playing its one-shot first-find sparkle.
+  // Set only when the appended word is a GENUINE first find (isFirstFound), so a
+  // rediscovery never sparkles. Cleared after SPARKLE_MS so it can replay on the
+  // next first find. Latest isFirstFound is read via a ref in the new-tile effect
+  // (which stays keyed on `words` only) so the effect doesn't need it as a dep.
+  const [sparkleWord, setSparkleWord] = useState(null);
+  const isFirstFoundRef = useRef(isFirstFound);
+  isFirstFoundRef.current = isFirstFound;
   // Latest queueEmpty in a ref so the new-tile effect (which must stay keyed on
   // `words` so it only fires when a tile actually appears) can read the current
   // value without adding it to the dep array and re-running on every queue tick.
@@ -131,6 +222,14 @@ export const GameButtonsContainer = ({ onClickWord, words, queueEmpty, filter = 
       // code path runs harmlessly.)
       setEnterWord(tadaTarget);
       setTadaWord(null);
+      // First-find sparkle: only on a GENUINE first discovery (rediscoveries get
+      // the plain entrance/tada with no sparkle). Set it alongside the entrance —
+      // it animates a ::after pseudo-element's opacity, NOT transform:scale on the
+      // tile, so it composes with both the entrance and the (deferred) tada scale
+      // animations instead of fighting them. If this append is a rediscovery,
+      // clear any stale sparkle so it can't linger onto the reappearing tile.
+      const sparkleThis = isFirstFoundRef.current;
+      setSparkleWord(sparkleThis ? tadaTarget : null);
       // Drop any timers still pending from a prior new-tile sequence before
       // arming this one (rapid back-to-back discoveries), then track the new ids
       // so the shrink-cleanup branch below can cancel them if tadaTarget vanishes.
@@ -140,6 +239,13 @@ export const GameButtonsContainer = ({ onClickWord, words, queueEmpty, filter = 
         setTimeout(() => setTadaWord(tadaTarget), TILE_ENTER_MS),
         setTimeout(() => setTadaWord(null), TILE_ENTER_MS + 1000)
       );
+      // Clear the sparkle after its one-shot finishes (tracked as a sequence timer
+      // so the shrink-cleanup branch cancels it if the tile vanishes mid-glint).
+      if (sparkleThis) {
+        sequenceTimers.current.push(
+          setTimeout(() => setSparkleWord(null), SPARKLE_MS)
+        );
+      }
       // Persistent ring + scroll the reward into view. The tile is already in
       // the DOM (this effect runs after the render that added it), so its ref is
       // populated. Smooth scroll when motion is allowed; instant under reduce.
@@ -215,9 +321,34 @@ export const GameButtonsContainer = ({ onClickWord, words, queueEmpty, filter = 
       setNewWord(null);
       setTadaWord(null);
       setEnterWord(null);
+      setSparkleWord(null);
     }
     prevWords.current = currentWords;
   }, [words]);
+
+  // Latest programmaticSelectWords in a ref so the nonce-keyed effect below can
+  // read the words to highlight WITHOUT depending on the array (it's a fresh ref
+  // value each render, so listing it as a dep would re-run the effect spuriously).
+  const programmaticSelectWordsRef = useRef(programmaticSelectWords);
+  programmaticSelectWordsRef.current = programmaticSelectWords;
+
+  // Sync the grid's selection markers when App signals a PROGRAMMATIC combine (a
+  // lineage-chip re-seed or "Surprise me" — bumped via programmaticSelectNonce).
+  // Those paths dispatch to the reducer directly and never reach handleClick,
+  // which is the only place the persistent is-new ring (setNewWord(null)) + the
+  // .selected highlight are otherwise updated. So clear the stale ring + fade-out
+  // and set .selected to the re-seed's word(s) (one for a chip re-seed so its tile
+  // highlights like a manual first tap; [] for surprise me, which combines in the
+  // same tick). Skip the initial mount (the nonce starts at 0 and no programmatic
+  // action has run) so we don't blank a freshly-restored newWord on first paint.
+  const prevNonceRef = useRef(programmaticSelectNonce);
+  useEffect(() => {
+    if (programmaticSelectNonce === prevNonceRef.current) return;
+    prevNonceRef.current = programmaticSelectNonce;
+    setNewWord(null);
+    setFadeOutWords([]);
+    setSelectedWords(programmaticSelectWordsRef.current);
+  }, [programmaticSelectNonce]);
 
   // Track selected words for highlight
   function handleClick(word) {
@@ -238,6 +369,23 @@ export const GameButtonsContainer = ({ onClickWord, words, queueEmpty, filter = 
     });
     setFadeOutWords([]); // Remove fade-out if re-selecting
   }
+
+  // Depth tier per word, memoized on the `words` identity. A word's lineage is
+  // immutable once discovered, so its tier only changes when `words` itself does
+  // (a discovery or reset) — NOT on the far hotter non-`words` re-renders this
+  // container also takes: every filter keystroke (filter is a prop), every
+  // selection, every queue tick. Computing it per visible tile in the render loop
+  // (each a fresh recursive lineage walk) re-walked the whole collection on each
+  // of those; this lifts it to once per `words` change. Output is identical — it
+  // calls the same depthTier the tests cover — just no longer recomputed on the
+  // typing/selection path. Look up tierMap.get(word) in the loop below.
+  const tierMap = useMemo(() => {
+    const m = new Map();
+    for (const word of Object.keys(words)) {
+      m.set(word, depthTier(word, words));
+    }
+    return m;
+  }, [words]);
 
   // Derived render order + active filter. `words` is unchanged (source of truth);
   // we only reorder/narrow the KEYS for display, so every word-keyed visual state
@@ -263,7 +411,7 @@ export const GameButtonsContainer = ({ onClickWord, words, queueEmpty, filter = 
   // the populated grid's static list cannot.
   if (visibleWords.length === 0) {
     return (
-      <div className="game-buttons-container">
+      <div className="game-buttons-container" ref={containerRef} tabIndex={-1}>
         <p className="grid-empty" role="status">
           {`no matches for "${filter.trim()}"`}
         </p>
@@ -274,16 +422,36 @@ export const GameButtonsContainer = ({ onClickWord, words, queueEmpty, filter = 
   return (
     <div
       className="game-buttons-container"
+      ref={containerRef}
+      tabIndex={-1}
       role="list"
       aria-label="Crafted words. Select two to combine them."
     >
       {visibleWords.map((word) => {
+        const isBase = baseWordSet.has(word);
         let btnClass = "game-button";
-        if (baseWordSet.has(word)) btnClass += " base-tile";
+        if (isBase) btnClass += " base-tile";
         // One-shot entrance pop on the freshly crafted tile. Sequenced before
         // tada (see the effect) so the two scale animations never overlap.
         if (enterWord === word) btnClass += " tile-enter";
         if (tadaWord === word) btnClass += " tada";
+        // One-shot first-find sparkle (genuine first discovery only). Opacity-only
+        // ::after glint, so it composes with tile-enter + tada scale animations.
+        if (sparkleWord === word) btnClass += " sparkle";
+        // Quiet "new this session" corner dot: a current word NOT in the mount
+        // snapshot was crafted this session. Base tiles are always in the snapshot
+        // so this never lands on them (and their ::before is the amber stripe; the
+        // dot rides ::after, so the two never collide). Static marker — no motion.
+        const isSessionNew =
+          !isBase && sessionBaseline ? !sessionBaseline.has(word) : false;
+        if (isSessionNew) btnClass += " session-new";
+        // Depth tier (capped) drives a subtle data-depth treatment so deeper words
+        // read as more "evolved". 0 = resting baseline (no tint); CSS styles 1..N.
+        // Read from the memoized tierMap (computed once per `words` change above)
+        // rather than re-walking the lineage per tile on every render; fall back to
+        // a direct compute if a word somehow isn't in the map (shouldn't happen —
+        // the map is built from the same Object.keys(words)).
+        const tier = tierMap.has(word) ? tierMap.get(word) : depthTier(word, words);
         // Persistent new ring. The suppression below is defensive only: the new
         // tile is never the one that fades out (fadeOutWords holds the two SOURCE
         // tiles), and handleClick clears newWord before any tile can become
@@ -302,6 +470,7 @@ export const GameButtonsContainer = ({ onClickWord, words, queueEmpty, filter = 
             <button
               type="button"
               className={btnClass}
+              data-depth={tier > 0 ? tier : undefined}
               ref={(el) => {
                 if (el) tileRefs.current.set(word, el);
                 else tileRefs.current.delete(word);

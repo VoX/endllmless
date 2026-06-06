@@ -10,6 +10,18 @@
   width: 100%;
 }
 
+/* The container carries tabindex=-1 only as a PROGRAMMATIC focus landing spot
+   (a lineage-chip re-seed moves focus here so it doesn't fall to <body> when the
+   chip unmounts). It's not a user-navigable control and isn't in the Tab order,
+   so it should not paint the global focus ring when it receives that managed
+   focus — the tiles inside show their own rings as the user tabs through them.
+   Suppresses both focus and focus-visible (some browsers mark a programmatic
+   focus right after a keyboard activation as focus-visible). */
+.game-buttons-container:focus,
+.game-buttons-container:focus-visible {
+  outline: none;
+}
+
 /* Listitem wrapper carries the a11y role without affecting flex layout. */
 .game-button-item {
   display: contents;
@@ -68,10 +80,17 @@
   box-shadow: var(--shadow);
 }
 
+/* position:relative + z-index keeps the emoji/label above the one-shot sparkle
+   ::after (which is absolutely positioned with a stacking context via opacity).
+   Without this the brief glint sweep would tint over the text; lifting the text
+   one layer up keeps the label/emoji crisp through the shimmer. relative with no
+   offsets doesn't move them, so layout is unchanged for non-sparkle tiles too. */
 .game-button-emoji {
   margin: 0;
   font-size: 1.6em;
   line-height: 1.1;
+  position: relative;
+  z-index: 1;
 }
 
 .game-button-label {
@@ -80,6 +99,8 @@
   font-weight: 600;
   color: var(--tile-text);
   opacity: 0.72;
+  position: relative;
+  z-index: 1;
 }
 
 .game-button.tada {
@@ -191,6 +212,149 @@
    harmless in light (where --focus is already a contrasting blue). */
 .game-button.is-new:focus-visible {
   outline-offset: 5px;
+}
+
+/* ---- First-find sparkle ----
+   A brief one-shot glint over a freshly appended tile on a GENUINE first
+   discovery (GameButton.jsx applies .sparkle only when isFirstFound; a
+   rediscovery gets the plain entrance/tada with NO sparkle). Implemented as a
+   ::after pseudo-element that animates OPACITY only — never transform:scale on
+   the tile itself — so it composes with the tile's own scale animations
+   (.tile-enter, then the deferred .tada) instead of fighting them. That keeps the
+   codebase invariant "never overlap two transform:scale animations on one
+   element": the sparkle is a separate layer on a separate property, so it can run
+   concurrently with either scale animation without the sequencing dance the
+   entrance/tada pair needs.
+   The glint is a soft diagonal highlight sweep (a transparent->highlight-tinted->
+   transparent linear gradient) that fades in, brightens, and fades out once. Uses
+   the theme-aware --sparkle token (bright gold in dark, near-white in light) — a
+   value LIGHTER than the teal tile in BOTH themes so the sweep reads as a glint
+   lifting off the tile, not a dark smudge passing over it. (It deliberately does
+   NOT reuse --new-ring: that token is the dark readable gold in light mode for the
+   ring's 3:1 contrast, which as a sweep over the teal tile inverts to a shadow
+   wipe.) pointer-events:none + low peak opacity so it reads as a quick shimmer,
+   not a flash, and never blocks the tile.
+   Stacking: this ::after has NO explicit z-index, so it paints just above the
+   tile's own background per normal stacking order. The emoji/label are given
+   `position: relative; z-index: 1` (see .game-button-emoji / .game-button-label),
+   which lifts them above the glint so the text stays crisp through the sweep; the
+   low peak opacity keeps them legible regardless. */
+.game-button.sparkle::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+  background: linear-gradient(
+    120deg,
+    transparent 30%,
+    var(--sparkle) 50%,
+    transparent 70%
+  );
+  opacity: 0;
+  pointer-events: none;
+  animation: tile-sparkle 0.7s ease-out 1;
+}
+
+/* Opacity-only sweep: fade in to a restrained peak, then back out. No transform,
+   so it never competes with the tile's scale animations. */
+@keyframes tile-sparkle {
+  0% {
+    opacity: 0;
+  }
+
+  35% {
+    opacity: 0.55;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ---- "New this session" corner dot ----
+   A quiet static marker on tiles crafted in the CURRENT session (GameButton.jsx
+   diffs the live word keys against the mount snapshot). Deliberately LIGHTER and
+   smaller than the bold .is-new ring so the two don't visually collide — a
+   returning player gets "what's fresh today" at a glance without it competing
+   with the single bold "most recent discovery" ring. Rendered on ::before (free
+   on crafted tiles — the amber stripe ::before is base-tile-only, and base tiles
+   are never session-new), so it never fights the sparkle (::after) or the
+   depth-tier fill/shadow below. A small accent dot in the TOP-RIGHT corner, kept
+   off the LEFT edge where base-tile's stripe lives and out of the way of the
+   is-new ring (which sits on the tile's outer box-shadow). Static — no motion, so
+   reduced-motion-safe by construction. Uses --new-ring at reduced opacity so it's
+   clearly a quieter sibling of the bold ring rather than a second full-strength
+   accent. */
+.game-button.session-new::before {
+  content: "";
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--new-ring);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* ---- Depth-tier tile treatment ----
+   Tiles carry a data-depth (1..3, capped — see depthTier in GameButton.jsx) that
+   scales how "evolved" a deeper word reads, so the collection FEELS like it's
+   compounding (README theory #6). Kept token-derived and SUBTLE: purely a
+   progressively stronger box-shadow (depth on the tile's elevation) — NOT a hue
+   ramp and NOT any edge/::before treatment, so it never becomes a rainbow and the
+   teal --tile-bg fill (and thus the --tile-text label contrast, AA on every tier)
+   is untouched. (The amber left-edge stripe is base-tile-only; base tiles are
+   never depth-tiered, so the two never combine.)
+   Composes only on the RESTING tile: selected/fade-out/is-new all set their own
+   background/box-shadow and must win, so these selectors are scoped with
+   :not(.selected):not(.fade-out):not(.is-new) — the same precedent base-tile sets
+   by being independent of those states. Static color, reduced-motion-safe. The
+   session corner dot (::before) and sparkle (::after) ride pseudo-elements, so
+   the shadow here never fights them. */
+.game-button[data-depth="1"]:not(.selected):not(.fade-out):not(.is-new) {
+  box-shadow: var(--shadow), 0 0 0 1px var(--shadow-color);
+}
+
+.game-button[data-depth="2"]:not(.selected):not(.fade-out):not(.is-new) {
+  box-shadow: var(--shadow), 0 0 0 1px var(--shadow-color),
+    0 0 6px var(--shadow-color);
+}
+
+.game-button[data-depth="3"]:not(.selected):not(.fade-out):not(.is-new) {
+  box-shadow: var(--shadow), 0 0 0 2px var(--shadow-color),
+    0 0 10px var(--shadow-color);
+}
+
+/* Re-assert the depth shadow on :hover — the base .game-button:hover rule resets
+   box-shadow to var(--shadow), which would otherwise drop the depth elevation on
+   hover (same pattern the is-new ring uses to survive hover). */
+.game-button[data-depth="1"]:not(.selected):not(.fade-out):not(.is-new):hover {
+  box-shadow: var(--shadow), 0 0 0 1px var(--shadow-color);
+}
+
+.game-button[data-depth="2"]:not(.selected):not(.fade-out):not(.is-new):hover {
+  box-shadow: var(--shadow), 0 0 0 1px var(--shadow-color),
+    0 0 6px var(--shadow-color);
+}
+
+.game-button[data-depth="3"]:not(.selected):not(.fade-out):not(.is-new):hover {
+  box-shadow: var(--shadow), 0 0 0 2px var(--shadow-color),
+    0 0 10px var(--shadow-color);
+}
+
+/* ---- Reduced-motion: neutralize the sparkle motion ----
+   Mirror index.css's foundation guard. The sparkle is opacity-only (no transform
+   anyway), but an animated opacity sweep is still motion, so drop the animation
+   and leave a faint static accent wash so a first find STILL reads as special
+   without movement (the novelty cue survives; only the motion is removed). The
+   session dot + depth shadows are already static, so they need no guard. */
+@media (prefers-reduced-motion: reduce) {
+  .game-button.sparkle::after {
+    animation: none !important;
+    opacity: 0.18;
+  }
 }
 
 /* Muted empty state shown when the active filter excludes every tile. Mirrors

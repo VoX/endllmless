@@ -138,6 +138,31 @@ function innerGameReducer(state, action) {
                 confirmReset: false
             };
         }
+        case 'reseed_word': {
+            // Deliberate re-seed of a brand-new selection from a single source word
+            // (the lineage chips on a fresh find) — also used by "Surprise me" to
+            // seed its first random pick. Unlike click_word this ALWAYS seeds
+            // first=word and never enqueues. The chips render whenever
+            // new + isFirstFound, which spans TWO states: the foundDelay=true result
+            // hold AND the lingering post-hold state (found_delay with an empty queue
+            // flips foundDelay->false but keeps new + isFirstFound, so the result +
+            // chips persist and stay clickable). reseed_word is strictly REQUIRED for
+            // the foundDelay=true window: there a plain click_word would take the
+            // ENQUEUE branch and orphan a half-pair instead of starting a fresh pick.
+            // (Post-hold, with foundDelay=false, a plain click_word would already
+            // take its fresh-seed branch — but reseed_word is correct for both, so
+            // the chips use it unconditionally.) Starting a new selection means any
+            // in-flight hold's result is intentionally dropped, so we reset wordState
+            // to the single-word seed and clear any queued batch (same "abort the
+            // rest" stance loading_error takes) so a pending found_delay can't later
+            // pop a stray pair on top of the fresh seed.
+            return {
+                ...state,
+                wordsQueue: [],
+                wordState: { ...defaultWordState, first: action.word },
+                confirmReset: false
+            };
+        }
         case 'loading_word': {
             return {
                 ...state,
