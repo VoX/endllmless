@@ -269,6 +269,45 @@
   border-color: var(--text-muted);
 }
 
+/* "Surprise me" shuffle: same outline-chrome family as .sort-toggle (transparent
+   fill, hairline --shadow-color border, --radius/--text tokens) so it sits
+   consistently in the topbar controls row. Slightly more horizontal padding for
+   the lone glyph. Overrides the global teal button fill. */
+.surprise-button {
+  background: transparent;
+  box-shadow: none;
+  border: 1px solid var(--shadow-color);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: var(--space-1) var(--space-2);
+  margin: 0;
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease,
+    color 0.12s ease, opacity 0.12s ease;
+}
+
+.surprise-button:hover {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+/* Disabled while a combine is loading or in its result hold: dim + not-allowed,
+   and neutralize the hover so it reads as inert during the gate. */
+.surprise-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.surprise-button:disabled:hover {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--shadow-color);
+}
+
 /* Dismissible onboarding hint: one line under the topbar, above the grid. */
 .onboarding-hint {
   display: flex;

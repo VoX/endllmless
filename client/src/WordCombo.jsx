@@ -42,7 +42,7 @@ const wordCombineApi = async (firstWord, secondWord) => {
 // "try again".
 const errorKind = (error) => (error && error.status === 429 ? 'rate_limited' : 'generic');
 
-export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError, milestoneReached = false }) => {
+export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError, onSelectWord, milestoneReached = false }) => {
     useEffect(() => {
         // loading_error clears first/second, so the first+second check below is
         // already false after a failure. The extra !wordState.error guard is
@@ -136,18 +136,6 @@ export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError
                             >
                                 {wordState.isFirstFound ? "New!" : "already discovered"}
                             </span>
-                            {/* Lineage on a fresh find only: the "X + Y" recipe the
-                                player just grew. aria-hidden so it doesn't double the
-                                self-contained combo sentence the live region already
-                                announces below; the badge itself is already hidden,
-                                but the source pair lives on words[new].from. */}
-                            {wordState.isFirstFound && words[wordState.new]?.from ? (
-                                <span className="combo-lineage">
-                                    {`${words[wordState.new].from[0]} + ${words[wordState.new].from[1]}`}
-                                </span>
-                            ) : (
-                                ""
-                            )}
                         </>
                     ) : wordState.loading ? (
                         <Spinner />
@@ -155,6 +143,43 @@ export const WordCombo = ({ wordState, words, loadingWord, newWord, loadingError
                         ""
                     )}
                 </span>
+                {/* Lineage on a fresh find only: the "X + Y" recipe the player just
+                    grew, now as two tappable chips that re-seed a fresh selection
+                    from a source word (onSelectWord -> clickWord). Rendered OUTSIDE
+                    the aria-hidden result span above ON PURPOSE: these are real
+                    focusable controls, and aria-hidden on an ancestor would both
+                    strip them from the accessibility tree AND leave a keyboard-
+                    focusable element hidden from AT (an axe/WCAG violation). The
+                    recipe *content* is still announced once by the self-contained
+                    "X plus Y equals Z" sentence in the live region below, so each
+                    chip carries an action-oriented aria-label ("Combine again from
+                    X") instead of re-reading the bare word — no double-announce. The
+                    "+" between them stays aria-hidden (decorative). Gated on
+                    onSelectWord so the row degrades to nothing if the prop is ever
+                    omitted, rather than rendering dead chips. */}
+                {wordState.new && wordState.isFirstFound && onSelectWord && words[wordState.new]?.from ? (
+                    <span className="combo-lineage">
+                        <button
+                            type="button"
+                            className="combo-lineage-chip"
+                            onClick={() => onSelectWord(words[wordState.new].from[0])}
+                            aria-label={`Combine again from ${words[wordState.new].from[0]}`}
+                        >
+                            {words[wordState.new].from[0]}
+                        </button>
+                        <span className="combo-op combo-lineage-op" aria-hidden="true">+</span>
+                        <button
+                            type="button"
+                            className="combo-lineage-chip"
+                            onClick={() => onSelectWord(words[wordState.new].from[1])}
+                            aria-label={`Combine again from ${words[wordState.new].from[1]}`}
+                        >
+                            {words[wordState.new].from[1]}
+                        </button>
+                    </span>
+                ) : (
+                    ""
+                )}
                 {wordState.first && wordState.second && wordState.new ? (
                     <span className="visually-hidden">
                         {/* Fold the new-vs-rediscovered distinction (shown visually

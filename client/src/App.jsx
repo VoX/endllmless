@@ -70,6 +70,24 @@ function App() {
   // after a reset for free.
   const discoveredCount = Object.keys(gameState.words).length;
 
+  // Snapshot the words present at mount (the localStorage-loaded set, via
+  // initializeState) so the grid can mark what's genuinely NEW THIS SESSION vs.
+  // long-ago discoveries a returning player has dozens of. Purely derived client
+  // state — no reducer/localStorage change. A ref (computed once at mount) so the
+  // baseline never shifts as the session's discoveries grow; the container diffs
+  // the CURRENT keys against this set at render, so words crafted this session
+  // (not in the snapshot) get marked and prior-session words don't.
+  //
+  // Reset caveat: reset_words rebuilds the map to the 5 base words, which ARE in
+  // this snapshot (they were present at mount too — defaults or persisted), so a
+  // reset correctly clears all session markers back to the bare base set without
+  // needing to re-snapshot. (A word re-crafted AFTER a reset is still "new this
+  // session" — it wasn't in the mount snapshot — which is the right read.)
+  const sessionBaselineRef = useRef(null);
+  if (sessionBaselineRef.current === null) {
+    sessionBaselineRef.current = new Set(Object.keys(gameState.words));
+  }
+
   // Replay the "+1" bump only when the total actually GROWS — not on first paint
   // (nothing was just discovered) and not on a reset's N->5 shrink (that's a
   // removal, so a celebratory scale-up would be semantically backwards). We bump
@@ -178,6 +196,26 @@ function App() {
     dispatch({ type: 'click_word', word });
   }
 
+  // "Surprise me": pick two random owned words and run them through the SAME
+  // selection flow a manual combine uses — dispatch click_word twice (first then
+  // second); WordCombo's effect auto-fires the request once both are set. The
+  // game/server allows self-combines (Fire+Fire), so two independent samples are
+  // fine even if they land on the same word. Guarded against firing mid-combine:
+  // the reducer's click_word ENQUEUES while loading/foundDelay rather than
+  // starting a fresh pair, so two clicks here during a hold would silently queue
+  // a stray combine instead of doing the obvious thing. So we no-op while a
+  // combine is in flight or in its result hold (same gate the button's disabled
+  // state reflects) and never start an overlapping request.
+  function surpriseMe() {
+    if (gameState.wordState.loading || gameState.wordState.foundDelay) return;
+    const keys = Object.keys(gameState.words);
+    if (keys.length === 0) return;
+    const first = keys[Math.floor(Math.random() * keys.length)];
+    const second = keys[Math.floor(Math.random() * keys.length)];
+    clickWord(first);
+    clickWord(second);
+  }
+
   async function newWord(word, emoji) {
     dispatch({ type: 'new_word', word, emoji });
     await new Promise(r => setTimeout(r, RESULT_HOLD_MS));
@@ -210,6 +248,7 @@ function App() {
             loadingWord={loadingWord}
             newWord={newWord}
             loadingError={loadingError}
+            onSelectWord={clickWord}
             milestoneReached={
               !!gameState.wordState.new &&
               gameState.wordState.isFirstFound &&
@@ -279,6 +318,22 @@ function App() {
             >
               {sortMode === "newest" ? "newest" : "A–Z"}
             </button>
+            {/* "Surprise me": one tap combines two random owned tiles for a player
+                who's stalled. Disabled while a combine is loading or in its result
+                hold so it respects the same gate the reducer enforces and never
+                starts an overlapping request (the handler no-ops in that window
+                too — belt and suspenders). Styled like .sort-toggle for a
+                consistent topbar chrome. */}
+            <button
+              type="button"
+              className="surprise-button"
+              onClick={surpriseMe}
+              disabled={gameState.wordState.loading || gameState.wordState.foundDelay}
+              aria-label="Combine two random words"
+              title="Surprise me"
+            >
+              🎲
+            </button>
           </div>
         </div>
         {showHint ? (
@@ -309,6 +364,8 @@ function App() {
           queueEmpty={gameState.wordsQueue.length === 0}
           filter={filter}
           sortMode={sortMode}
+          isFirstFound={gameState.wordState.isFirstFound}
+          sessionBaseline={sessionBaselineRef.current}
         />
       </div>
       <ResetButton confirmReset={gameState.confirmReset} resetWords={resetWords} />

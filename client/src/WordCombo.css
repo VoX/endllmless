@@ -20,6 +20,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-wrap: wrap;
   min-width: 1ch;
 }
 
@@ -67,22 +68,56 @@
   letter-spacing: 0;
 }
 
-/* Muted "X + Y" recipe line shown under the result badge on a fresh find. Sits
-   on its own line (block) so it reads as a caption beneath the new word rather
-   than trailing the badge. Colored to recede like .result-badge — present but not
-   competing with the discovered word. Sized slightly larger than the one-word
-   .result-badge (0.6rem): unlike that bare "New!" label, this carries real,
-   non-redundant info (the two-word recipe the player just discovered) and is
-   meant to be read, so 0.7rem keeps it legible without pulling focus. The recipe
-   content already reaches AT via the announced "X plus Y equals Z" sentence in
-   the combo-result live region (WordCombo.jsx), so this aria-hidden caption is a
-   visual re-emphasis, not the only path to it. */
+/* "X + Y" recipe line shown under the result badge on a fresh find — now a pair
+   of tappable chips (the two source words) around a muted "+" that re-seed a
+   fresh selection. Sits on its own line beneath the new word (full flex-basis +
+   centered) so it reads as a caption, not a trailer on the badge. The chips carry
+   the real, non-redundant recipe (and a re-select affordance), so unlike the bare
+   "New!" badge this line is meant to be read AND acted on. */
 .combo-lineage {
-  display: block;
-  font-size: 0.7rem;
-  color: var(--text-muted);
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
   margin-top: 2px;
   white-space: nowrap;
+}
+
+/* The "+" between the two lineage chips: muted recede like the equation-row
+   .combo-op, just a hair smaller so it sits quietly between the chips. */
+.combo-lineage-op {
+  font-size: 0.7rem;
+  padding: 0;
+}
+
+/* Re-select chip: a source word styled as a small outline button in the same
+   topbar-chrome family as .sort-toggle / .grid-filter (surface fill, hairline
+   --shadow-color border, --radius). Keeps the caption's recipe role but makes it
+   actionable. Contrast: --text on --surface (NOT --text-muted) so the small bold
+   chip clears WCAG AA — muted on surface at this size would fail. Preserves the
+   tile/caption capitalize transform. The chip is the recede here (small + quiet
+   chrome), so it doesn't need to also dim its text below the readable floor. */
+.combo-lineage-chip {
+  background: var(--surface);
+  box-shadow: none;
+  border: 1px solid var(--shadow-color);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  padding: var(--space-1) var(--space-2);
+  margin: 0;
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.combo-lineage-chip:hover {
+  background: var(--surface);
+  color: var(--accent-text);
+  border-color: var(--text-muted);
 }
 
 /* Inline failure message for a combine that errored (rate limit / network /
